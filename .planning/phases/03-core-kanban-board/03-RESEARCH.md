@@ -603,7 +603,7 @@ export function PriorityIndicator({ priority }: PriorityIndicatorProps) {
 | A2 | BacklogのpriorittyID 2=高, 3=中, 4=低 | Pitfall 6 | MEDIUM: UI-SPECに明記済みだが、Backlog APIドキュメントとの照合は未実施。テストデータで検証可能 |
 | A3 | CSS Modulesのcomposesは不使用（各コンポーネント独立） | Architecture Patterns | LOW: composes使用は可能だが不要 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **リロード中のエラーハンドリング**
    - What we know: D-14でエラー時は全ボードエラー表示。リロード時もこの挙動
