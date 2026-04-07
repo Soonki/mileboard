@@ -1,5 +1,6 @@
-#[allow(dead_code)]
 mod backlog;
+
+use backlog::client::BacklogClient;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -7,6 +8,10 @@ pub fn run() {
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_store::Builder::new().build())
         .plugin(tauri_plugin_opener::init())
+        .manage(BacklogClient::new())
+        .invoke_handler(tauri::generate_handler![
+            backlog::commands::fetch_board_data
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
