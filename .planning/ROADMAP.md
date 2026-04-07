@@ -63,12 +63,12 @@ Plans:
   2. Issues without a milestone appear in a dedicated "Unassigned" lane
   3. Each issue card displays its key, title, status badge, assignee name, and priority indicator
   4. A loading state (skeleton or spinner) is visible while initial data is being fetched
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 03-01: TBD
-- [ ] 03-02: TBD
-- [ ] 03-03: TBD
+- [ ] 03-01-PLAN.md — boardStore (Zustand state management) + Phase 3 CSS design tokens in global.css
+- [ ] 03-02-PLAN.md — Leaf presentational components: StatusBadge, PriorityIndicator, IssueCard, EmptyLane with tests
+- [ ] 03-03-PLAN.md — Board assembly: Lane, LaneHeader, BoardSkeleton, BoardError, BoardHeader, Board + App.tsx wiring + visual verification
 
 **UI hint**: yes
 
