@@ -1,0 +1,174 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.label {
+  font-size: var(--font-size-label);
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-label);
+  color: var(--color-text-primary);
+}
+
+.input {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-body);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
+  transition: border-color var(--transition-fast);
+  width: 100%;
+}
+
+.input:focus {
+  border: 2px solid var(--color-accent);
+  padding: 0 15px;
+  outline: none;
+}
+
+.input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.input::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.inputWrapper {
+  position: relative;
+  display: flex;
+}
+
+.inputWrapper .input {
+  padding-right: 40px;
+}
+
+.inputWrapper .input:focus {
+  padding-right: 39px;
+}
+
+.toggleButton {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 40px;
+  width: 32px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.toggleButton:hover {
+  color: var(--color-text-primary);
+}
+
+.testSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+.button {
+  height: 40px;
+  padding: 0 24px;
+  background-color: var(--color-accent);
+  color: #FFFFFF;
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-semibold);
+  font-family: inherit;
+  border: none;
+  border-radius: var(--radius-input);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color var(--transition-fast);
+}
+
+.button:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+}
+
+.button:disabled {
+  background-color: var(--color-disabled);
+  cursor: not-allowed;
+}
+
+.testButton {
+  align-self: flex-start;
+}
+
+.saveButton {
+  width: 100%;
+  height: 44px;
+  margin-top: var(--space-lg);
+}
+
+.successMessage {
+  font-size: var(--font-size-sm);
+  color: var(--color-success);
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.errorMessage {
+  font-size: var(--font-size-sm);
+  color: var(--color-error);
+}
+
+.select {
+  height: 40px;
+  padding: 0 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  font-size: var(--font-size-body);
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background-color: var(--color-surface);
+  width: 100%;
+  cursor: pointer;
+  appearance: auto;
+}
+
+.select:focus {
+  border: 2px solid var(--color-accent);
+  padding: 0 15px;
+  outline: none;
+}
+
+.select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #FFFFFF;
+  border-radius: 50%;
+  animation: spin 600ms linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}

@@ -5,5 +5,9 @@ vi.mock('@tauri-apps/plugin-http', () => ({
 }));
 
 vi.mock('@tauri-apps/plugin-store', () => ({
-  load: vi.fn(),
+  load: vi.fn().mockResolvedValue({
+    get: vi.fn().mockResolvedValue(undefined),
+    set: vi.fn().mockResolvedValue(undefined),
+    save: vi.fn().mockResolvedValue(undefined),
+  }),
 }));
