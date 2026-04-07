@@ -11,3 +11,7 @@ vi.mock('@tauri-apps/plugin-store', () => ({
     save: vi.fn().mockResolvedValue(undefined),
   }),
 }));
+
+vi.mock('@tauri-apps/api/core', () => ({
+  invoke: vi.fn(),
+}));
