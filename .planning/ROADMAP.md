@@ -32,9 +32,9 @@ Decimal phases appear between their surrounding integers in numeric order.
 **Plans**: 3 plans
 
 Plans:
-- [ ] 01-01-PLAN.md — Backlog API service layer: type contracts, backlogApi.ts (testConnection + fetchProjects), Vitest infrastructure
-- [ ] 01-02-PLAN.md — Project scaffold and persistence: Cargo.toml plugins, Tauri capabilities, settingsStore.ts (Zustand), settingsStorage.ts, global.css tokens
-- [ ] 01-03-PLAN.md — Settings UI: SettingsForm (6 states), SettingsCard, SettingsModal, App.tsx routing, human verification
+- [x] 01-01-PLAN.md — Backlog API service layer: type contracts, backlogApi.ts (testConnection + fetchProjects), Vitest infrastructure
+- [x] 01-02-PLAN.md — Project scaffold and persistence: Cargo.toml plugins, Tauri capabilities, settingsStore.ts (Zustand), settingsStorage.ts, global.css tokens
+- [x] 01-03-PLAN.md — Settings UI: SettingsForm (6 states), SettingsCard, SettingsModal, App.tsx routing, human verification
 
 **UI hint**: yes
 
