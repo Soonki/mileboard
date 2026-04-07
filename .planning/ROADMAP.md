@@ -50,9 +50,9 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — Rust Backlog API client core: serde types, thiserror errors, BacklogClient with rate limiting and pagination
-- [ ] 02-02-PLAN.md — Tauri IPC command wiring: fetch_board_data command, BacklogClient Managed State, lib.rs registration
-- [ ] 02-03-PLAN.md — TypeScript type definitions and tauriBridge IPC proxy with invoke mock setup and unit tests
+- [x] 02-01-PLAN.md — Rust Backlog API client core: serde types, thiserror errors, BacklogClient with rate limiting and pagination
+- [x] 02-02-PLAN.md — Tauri IPC command wiring: fetch_board_data command, BacklogClient Managed State, lib.rs registration
+- [x] 02-03-PLAN.md — TypeScript type definitions and tauriBridge IPC proxy with invoke mock setup and unit tests
 
 ### Phase 3: Core Kanban Board
 **Goal**: Users see their Backlog milestones as chronological lanes with issue cards, plus an unassigned lane, with loading feedback during data fetch
@@ -115,8 +115,8 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation & Connection Settings | 0/3 | Not started | - |
-| 2. Backlog Data Pipeline | 0/3 | Not started | - |
+| 1. Foundation & Connection Settings | 3/3 | Complete | 2026-04-07 |
+| 2. Backlog Data Pipeline | 3/3 | Complete | 2026-04-08 |
 | 3. Core Kanban Board | 0/3 | Not started | - |
 | 4. Board Enrichment | 0/2 | Not started | - |
 | 5. Drag & Drop with Optimistic Updates | 0/3 | Not started | - |
