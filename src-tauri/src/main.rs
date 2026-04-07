@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    mileboard_scaffold_lib::run()
+    mileboard_lib::run()
 }
