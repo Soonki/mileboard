@@ -2,8 +2,8 @@
 phase: 3
 slug: core-kanban-board
 status: draft
-nyquist_compliant: false
-wave_0_complete: false
+nyquist_compliant: true
+wave_0_complete: true
 created: 2026-04-08
 ---
 
@@ -38,14 +38,14 @@ created: 2026-04-08
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 03-01-01 | 01 | 1 | BOARD-01 | — | N/A | unit | `npx vitest run src/components/Board/Board.test.tsx -x` | ❌ W0 | ⬜ pending |
-| 03-01-02 | 01 | 1 | BOARD-02 | — | N/A | unit | `npx vitest run src/components/Board/Board.test.tsx -x` | ❌ W0 | ⬜ pending |
-| 03-01-03 | 01 | 1 | BOARD-03 | — | N/A | unit | `npx vitest run src/components/IssueCard/IssueCard.test.tsx -x` | ❌ W0 | ⬜ pending |
-| 03-01-04 | 01 | 1 | UX-01 | — | N/A | unit | `npx vitest run src/components/Board/Board.test.tsx -x` | ❌ W0 | ⬜ pending |
-| 03-S-01 | 01 | 1 | STORE-01 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ❌ W0 | ⬜ pending |
-| 03-S-02 | 01 | 1 | STORE-02 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ❌ W0 | ⬜ pending |
-| 03-UI-01 | 02 | 2 | UI-HEADER | — | N/A | unit | `npx vitest run src/components/BoardHeader/BoardHeader.test.tsx -x` | ❌ W0 | ⬜ pending |
-| 03-UI-02 | 02 | 2 | UI-ERROR | — | N/A | unit | `npx vitest run src/components/BoardError/BoardError.test.tsx -x` | ❌ W0 | ⬜ pending |
+| 03-01-01 | 01 | 1 | BOARD-01 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ✅ TDD | ⬜ pending |
+| 03-01-02 | 01 | 1 | BOARD-02 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ✅ TDD | ⬜ pending |
+| 03-01-03 | 01 | 1 | BOARD-03 | — | N/A | unit | `npx vitest run src/components/IssueCard/IssueCard.test.tsx -x` | ✅ TDD | ⬜ pending |
+| 03-01-04 | 01 | 1 | UX-01 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ✅ TDD | ⬜ pending |
+| 03-S-01 | 01 | 1 | STORE-01 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ✅ TDD | ⬜ pending |
+| 03-S-02 | 01 | 1 | STORE-02 | — | N/A | unit | `npx vitest run src/stores/boardStore.test.ts -x` | ✅ TDD | ⬜ pending |
+| 03-UI-01 | 03 | 2 | UI-HEADER | — | N/A | unit | `npx vitest run src/components/BoardHeader/BoardHeader.test.tsx -x` | ✅ TDD | ⬜ pending |
+| 03-UI-02 | 03 | 2 | UI-ERROR | — | N/A | unit | `npx vitest run src/components/BoardError/BoardError.test.tsx -x` | ✅ TDD | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -53,14 +53,16 @@ created: 2026-04-08
 
 ## Wave 0 Requirements
 
-- [ ] `src/stores/boardStore.test.ts` — boardStoreの状態遷移テスト
-- [ ] `src/components/Board/Board.test.tsx` — Board状態分岐テスト（loading/loaded/error）
-- [ ] `src/components/IssueCard/IssueCard.test.tsx` — カードフィールド表示テスト
-- [ ] `src/components/BoardHeader/BoardHeader.test.tsx` — リロードボタンテスト
-- [ ] `src/components/BoardError/BoardError.test.tsx` — エラー表示 + リトライテスト
-- [ ] `src/components/Lane/Lane.test.tsx` — レーン描画テスト
-- [ ] `src/components/StatusBadge/StatusBadge.test.tsx` — バッジ表示テスト
-- [ ] `src/components/PriorityIndicator/PriorityIndicator.test.tsx` — 優先度マッピングテスト
+各プランのTDDタスクがWave 0相当を担います（テスト先行で作成・実行）。独立したWave 0プランは不要。
+
+- [x] `src/stores/boardStore.test.ts` — Plan 03-01 Task 1 (TDD) で作成
+- [x] `src/components/IssueCard/IssueCard.test.tsx` — Plan 03-02 Task 1 (TDD) で作成
+- [x] `src/components/StatusBadge/StatusBadge.test.tsx` — Plan 03-02 Task 1 (TDD) で作成
+- [x] `src/components/PriorityIndicator/PriorityIndicator.test.tsx` — Plan 03-02 Task 1 (TDD) で作成
+- [x] `src/components/Lane/Lane.test.tsx` — Plan 03-03 Task 1 (TDD) で作成
+- [x] `src/components/BoardError/BoardError.test.tsx` — Plan 03-03 Task 1 (TDD) で作成
+- [x] `src/components/BoardHeader/BoardHeader.test.tsx` — Plan 03-03 Task 2 (TDD) で作成
+- [x] `src/components/Board/Board.test.tsx` — Plan 03-03 Task 2 (TDD) で作成
 
 ---
 
