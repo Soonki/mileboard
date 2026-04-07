@@ -47,12 +47,12 @@ Plans:
   2. Invoking the issue fetch command returns all issues for a given milestone, including paginated results beyond the first page
   3. Invoking the unassigned issues command returns issues with no milestone in the configured project
   4. API calls respect Backlog rate limits -- sequential fetching with header-based throttling prevents 429 errors
-**Plans**: TBD
+**Plans**: 3 plans
 
 Plans:
-- [ ] 02-01: TBD
-- [ ] 02-02: TBD
-- [ ] 02-03: TBD
+- [ ] 02-01-PLAN.md — Rust Backlog API client core: serde types, thiserror errors, BacklogClient with rate limiting and pagination
+- [ ] 02-02-PLAN.md — Tauri IPC command wiring: fetch_board_data command, BacklogClient Managed State, lib.rs registration
+- [ ] 02-03-PLAN.md — TypeScript type definitions and tauriBridge IPC proxy with invoke mock setup and unit tests
 
 ### Phase 3: Core Kanban Board
 **Goal**: Users see their Backlog milestones as chronological lanes with issue cards, plus an unassigned lane, with loading feedback during data fetch
