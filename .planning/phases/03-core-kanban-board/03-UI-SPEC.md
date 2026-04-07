@@ -238,7 +238,7 @@ Card layout (3-line compact, per D-04):
 |----------|-------|
 | Font size | `--font-size-sm` (12px) |
 | Font weight | `--font-weight-regular` (400) |
-| Padding | 2px 6px |
+| Padding | `--space-xs` (4px) `--space-sm` (8px) |
 | Background | `--color-bg` (#F8F9FA) -- uniform gray per D-06 |
 | Border | 1px solid `--color-border` |
 | Border-radius | 4px |
