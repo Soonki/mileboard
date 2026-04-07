@@ -1,3 +1,4 @@
+#[allow(dead_code)]
 mod backlog;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
