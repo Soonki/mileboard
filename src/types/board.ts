@@ -20,3 +20,13 @@ export interface FetchBoardParams {
   milestonePrefix: string;
   categoryIds: number[] | null;
 }
+
+/** Parameters for the update_issue_milestone IPC command.
+ * Field names use camelCase -- Tauri auto-converts to snake_case for Rust. */
+export interface UpdateIssueMilestoneParams {
+  host: string;
+  apiKey: string;
+  issueIdOrKey: string;
+  newMilestoneId: number | null;
+  milestonePrefix: string;
+}

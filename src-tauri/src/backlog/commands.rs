@@ -33,3 +33,31 @@ pub async fn fetch_board_data(
         .await
         .map_err(|e| e.to_string())
 }
+
+/// Update an issue's milestone via Backlog PATCH API.
+///
+/// Preserves non-prefix milestones while swapping the prefix-matching one.
+/// Parameters use owned String types (Tauri async command Send constraint).
+///
+/// - `new_milestone_id`: Some(id) to move to a milestone, None to move to unassigned
+/// - `milestone_prefix`: prefix to identify managed milestones (e.g., "Sprint")
+#[tauri::command]
+pub async fn update_issue_milestone(
+    client: State<'_, BacklogClient>,
+    host: String,
+    api_key: String,
+    issue_id_or_key: String,
+    new_milestone_id: Option<u64>,
+    milestone_prefix: String,
+) -> Result<(), String> {
+    client
+        .update_milestone(
+            &host,
+            &api_key,
+            &issue_id_or_key,
+            new_milestone_id,
+            &milestone_prefix,
+        )
+        .await
+        .map_err(|e| e.to_string())
+}

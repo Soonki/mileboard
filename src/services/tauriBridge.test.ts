@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { invoke } from '@tauri-apps/api/core';
-import { fetchBoardData } from './tauriBridge';
+import { fetchBoardData, updateIssueMilestone } from './tauriBridge';
 import type { BoardData } from '../types/board';
 
 const mockInvoke = vi.mocked(invoke);
@@ -153,6 +153,70 @@ describe('tauriBridge', () => {
       expect(result.milestones[0].issues[0].priority).toBeNull();
       expect(result.milestones[0].issues[0].assignee).toBeNull();
       expect(result.milestones[0].milestone.startDate).toBeNull();
+    });
+  });
+
+  describe('updateIssueMilestone', () => {
+    it('calls invoke with update_issue_milestone command and camelCase params', async () => {
+      mockInvoke.mockResolvedValue(undefined);
+
+      await updateIssueMilestone(
+        'example.backlog.com',
+        'key123',
+        'PROJ-42',
+        99,
+        'Sprint',
+      );
+
+      expect(mockInvoke).toHaveBeenCalledWith('update_issue_milestone', {
+        host: 'example.backlog.com',
+        apiKey: 'key123',
+        issueIdOrKey: 'PROJ-42',
+        newMilestoneId: 99,
+        milestonePrefix: 'Sprint',
+      });
+    });
+
+    it('passes null newMilestoneId for unassigned move', async () => {
+      mockInvoke.mockResolvedValue(undefined);
+
+      await updateIssueMilestone(
+        'example.backlog.com',
+        'key123',
+        'PROJ-42',
+        null,
+        'Sprint',
+      );
+
+      expect(mockInvoke).toHaveBeenCalledWith('update_issue_milestone', {
+        host: 'example.backlog.com',
+        apiKey: 'key123',
+        issueIdOrKey: 'PROJ-42',
+        newMilestoneId: null,
+        milestonePrefix: 'Sprint',
+      });
+    });
+
+    it('propagates error from invoke', async () => {
+      mockInvoke.mockRejectedValue('マイルストーンの更新に失敗しました');
+
+      await expect(
+        updateIssueMilestone('host', 'key', 'PROJ-1', 42, 'Sprint'),
+      ).rejects.toBe('マイルストーンの更新に失敗しました');
+    });
+
+    it('resolves void on success', async () => {
+      mockInvoke.mockResolvedValue(undefined);
+
+      const result = await updateIssueMilestone(
+        'host',
+        'key',
+        'PROJ-1',
+        42,
+        'Sprint',
+      );
+
+      expect(result).toBeUndefined();
     });
   });
 });

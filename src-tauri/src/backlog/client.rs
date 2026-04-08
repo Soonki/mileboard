@@ -312,6 +312,87 @@ impl BacklogClient {
         }
     }
 
+    /// Fetch a single issue by ID or key from Backlog API.
+    pub async fn fetch_issue(
+        &self,
+        host: &str,
+        api_key: &str,
+        issue_id_or_key: &str,
+    ) -> Result<Issue, BacklogError> {
+        let url = build_url(
+            host,
+            &format!("/issues/{issue_id_or_key}"),
+            api_key,
+            &[],
+        );
+        let response = self
+            .http
+            .get(&url)
+            .send()
+            .await
+            .map_err(map_reqwest_error)?;
+        let response = self.check_response(response).await?;
+        let body = response
+            .text()
+            .await
+            .map_err(|e| BacklogError::ParseError(e.to_string()))?;
+        serde_json::from_str(&body).map_err(|e| BacklogError::ParseError(e.to_string()))
+    }
+
+    /// Update an issue's milestones, preserving non-prefix milestones.
+    ///
+    /// Per CLAUDE.md: Backlog PATCH API replaces the entire milestoneId[] array,
+    /// so we must fetch current milestones, filter out prefix-matching ones,
+    /// and add the new milestone ID (if any).
+    #[allow(clippy::too_many_arguments)]
+    pub async fn update_milestone(
+        &self,
+        host: &str,
+        api_key: &str,
+        issue_id_or_key: &str,
+        new_milestone_id: Option<u64>,
+        prefix: &str,
+    ) -> Result<(), BacklogError> {
+        if issue_id_or_key.trim().is_empty() {
+            return Err(BacklogError::InvalidInput(
+                "課題IDまたはキーが空です".into(),
+            ));
+        }
+
+        let issue = self.fetch_issue(host, api_key, issue_id_or_key).await?;
+        let milestone_ids = rebuild_milestone_ids(&issue.milestone, new_milestone_id, prefix);
+
+        let url = build_url(
+            host,
+            &format!("/issues/{issue_id_or_key}"),
+            api_key,
+            &[],
+        );
+
+        let form_params: Vec<(&str, String)> = if milestone_ids.is_empty() {
+            vec![("milestoneId[]", String::new())]
+        } else {
+            milestone_ids
+                .iter()
+                .map(|mid| ("milestoneId[]", mid.to_string()))
+                .collect()
+        };
+
+        let response = self
+            .http
+            .patch(&url)
+            .form(&form_params)
+            .send()
+            .await
+            .map_err(map_reqwest_error)?;
+
+        self.check_response(response)
+            .await
+            .map_err(|e| BacklogError::UpdateFailed(e.to_string()))?;
+
+        Ok(())
+    }
+
     async fn throttle_if_needed(&self, response: &reqwest::Response) {
         let remaining = response
             .headers()
@@ -394,6 +475,27 @@ fn build_issue_url(
         url.push_str(&format!("&count={c}"));
     }
     url
+}
+
+/// Rebuild milestone ID array preserving non-prefix milestones and optionally adding the new one.
+///
+/// This is the core logic for the milestoneId[] preservation requirement (CLAUDE.md):
+/// Backlog PATCH API replaces the entire milestoneId array, so we must keep
+/// milestones that don't match our prefix while swapping the prefix-matching one.
+pub(crate) fn rebuild_milestone_ids(
+    current_milestones: &[Milestone],
+    new_milestone_id: Option<u64>,
+    prefix: &str,
+) -> Vec<u64> {
+    let mut ids: Vec<u64> = current_milestones
+        .iter()
+        .filter(|m| !m.name.starts_with(prefix))
+        .map(|m| m.id)
+        .collect();
+    if let Some(mid) = new_milestone_id {
+        ids.push(mid);
+    }
+    ids
 }
 
 fn map_reqwest_error(err: reqwest::Error) -> BacklogError {
@@ -750,5 +852,64 @@ mod tests {
         let msg = err.to_string();
         assert!(!msg.contains("apiKey"));
         assert!(!msg.contains("key123"));
+    }
+
+    // --- rebuild_milestone_ids ---
+
+    #[test]
+    fn rebuild_milestone_ids_preserves_non_prefix_milestones() {
+        let milestones = vec![
+            make_milestone(1, "Sprint 2026-04", Some("2026-04-01"), None),
+            make_milestone(2, "Release v2", Some("2026-05-01"), None),
+            make_milestone(3, "Sprint 2026-05", Some("2026-05-01"), None),
+        ];
+        let ids = rebuild_milestone_ids(&milestones, Some(99), "Sprint");
+        // Sprint milestones (1, 3) should be removed; non-prefix (2) preserved; new (99) added
+        assert_eq!(ids, vec![2, 99]);
+    }
+
+    #[test]
+    fn rebuild_milestone_ids_with_none_produces_only_non_prefix() {
+        let milestones = vec![
+            make_milestone(1, "Sprint 2026-04", Some("2026-04-01"), None),
+            make_milestone(2, "Release v2", Some("2026-05-01"), None),
+        ];
+        let ids = rebuild_milestone_ids(&milestones, None, "Sprint");
+        // Sprint milestone (1) removed; non-prefix (2) preserved; no new milestone added
+        assert_eq!(ids, vec![2]);
+    }
+
+    #[test]
+    fn rebuild_milestone_ids_all_prefix_with_none_produces_empty() {
+        let milestones = vec![
+            make_milestone(1, "Sprint 2026-04", Some("2026-04-01"), None),
+            make_milestone(3, "Sprint 2026-05", Some("2026-05-01"), None),
+        ];
+        let ids = rebuild_milestone_ids(&milestones, None, "Sprint");
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn rebuild_milestone_ids_empty_milestones_with_new_id() {
+        let milestones: Vec<Milestone> = vec![];
+        let ids = rebuild_milestone_ids(&milestones, Some(42), "Sprint");
+        assert_eq!(ids, vec![42]);
+    }
+
+    #[test]
+    fn rebuild_milestone_ids_empty_milestones_with_none() {
+        let milestones: Vec<Milestone> = vec![];
+        let ids = rebuild_milestone_ids(&milestones, None, "Sprint");
+        assert!(ids.is_empty());
+    }
+
+    #[test]
+    fn rebuild_milestone_ids_no_matching_prefix_preserves_all() {
+        let milestones = vec![
+            make_milestone(1, "Release v1", None, None),
+            make_milestone(2, "Release v2", None, None),
+        ];
+        let ids = rebuild_milestone_ids(&milestones, Some(99), "Sprint");
+        assert_eq!(ids, vec![1, 2, 99]);
     }
 }

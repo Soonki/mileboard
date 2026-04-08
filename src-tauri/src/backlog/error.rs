@@ -25,6 +25,9 @@ pub enum BacklogError {
 
     #[error("入力パラメータが不正です: {0}")]
     InvalidInput(String),
+
+    #[error("マイルストーンの更新に失敗しました: {0}")]
+    UpdateFailed(String),
 }
 
 #[cfg(test)]
@@ -86,6 +89,15 @@ mod tests {
     fn invalid_input_displays_detail() {
         let err = BacklogError::InvalidInput("hostが空です".into());
         assert_eq!(err.to_string(), "入力パラメータが不正です: hostが空です");
+    }
+
+    #[test]
+    fn update_failed_displays_japanese_message() {
+        let err = BacklogError::UpdateFailed("HTTP 403".into());
+        assert_eq!(
+            err.to_string(),
+            "マイルストーンの更新に失敗しました: HTTP 403"
+        );
     }
 
     #[test]

@@ -99,12 +99,12 @@ Plans:
   3. Issues assigned to multiple milestones display a warning badge, appear in the earliest-start-date lane, and cannot be dragged between lanes (only within their current lane)
   4. API failures during drag-and-drop display an error toast with a meaningful message
   5. Non-prefix milestones already assigned to an issue are preserved when the visible milestone is changed
-**Plans**: 3 plans
+**Plans**: TBD
 
 Plans:
-- [ ] 05-01-PLAN.md — Rust update_issue_milestone command + tauriBridge proxy + boardStore moveIssue with optimistic update/rollback + CSS tokens
-- [ ] 05-02-PLAN.md — DnD UI: WarningBadge, DragOverlayCard, Board/Lane/IssueCard DndContext integration + Toaster
-- [ ] 05-03-PLAN.md — Final regression tests + visual/functional verification checkpoint
+- [ ] 05-01: TBD
+- [ ] 05-02: TBD
+- [ ] 05-03: TBD
 
 **UI hint**: yes
 
