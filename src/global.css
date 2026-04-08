@@ -60,6 +60,15 @@
   --color-drop-target: rgba(37, 99, 235, 0.06);
   --shadow-drag: 0 8px 24px rgba(0, 0, 0, 0.25), 0 2px 8px rgba(0, 0, 0, 0.15);
   --transition-drag: 200ms cubic-bezier(0.2, 0, 0, 1);
+
+  /* Phase 6: Filtering */
+  --color-chip-bg: #DBEAFE;
+  --color-chip-text: #1E40AF;
+  --color-chip-remove: #6B7280;
+  --color-chip-remove-hover: #111827;
+  --color-checkbox-checked: #2563EB;
+  --color-dropdown-hover: #F3F4F6;
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
 }
 
 body {
