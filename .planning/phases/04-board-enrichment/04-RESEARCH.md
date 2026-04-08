@@ -505,7 +505,7 @@ it('opens Backlog issue URL on click', async () => {
 | A2 | max-height transitionでスムーズな展開/折りたたみが実現できる | Code Examples (Toggle) | 別のアニメーション手法(例: CSS grid template rows)に変更。影響小 |
 | A3 | luminance閾値0.179でWCAG AA 4.5:1を達成できる | Pattern 2 | テストで確認可能。閾値の微調整で対応可能 |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **hostUrl保存形式**
    - What we know: `settingsStore.hostUrl`はstring型で保存される
