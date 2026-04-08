@@ -1,0 +1,19 @@
+.high,
+.medium,
+.low {
+  font-size: var(--font-size-sm);
+  letter-spacing: -1px;
+  line-height: var(--line-height-label);
+}
+
+.high {
+  color: var(--color-error);
+}
+
+.medium {
+  color: var(--color-warning);
+}
+
+.low {
+  color: var(--color-success);
+}
