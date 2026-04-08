@@ -25,7 +25,7 @@ export interface BacklogMilestone {
   id: number;
   projectId: number;
   name: string;
-  description: string;
+  description: string | null;
   startDate: string | null;
   releaseDueDate: string | null;
   archived: boolean;

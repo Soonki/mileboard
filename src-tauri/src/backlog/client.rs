@@ -496,7 +496,7 @@ mod tests {
             id,
             project_id: 1,
             name: name.to_string(),
-            description: String::new(),
+            description: None,
             start_date: start.map(|s| s.to_string()),
             release_due_date: due.map(|s| s.to_string()),
             archived: false,
