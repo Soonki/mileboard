@@ -1,339 +1,302 @@
-# Domain Pitfalls
+# Pitfalls Research
 
-**Domain:** Tauri + React kanban board with Backlog API v2 integration
-**Researched:** 2026-04-07
-
----
+**Domain:** Adding filtering, sorting, intra-lane reordering, and multi-select bulk move to existing kanban board
+**Researched:** 2026-04-08
+**Confidence:** HIGH (codebase analysis + @dnd-kit issue tracker + Backlog API docs + Zustand community patterns)
 
 ## Critical Pitfalls
 
-Mistakes that cause rewrites, data corruption, or major production issues.
+### Pitfall 1: Filtered View Corrupts DnD ID Resolution
+
+**What goes wrong:**
+Filters hide cards from the UI, but `boardStore.data` holds the full unfiltered dataset. The current `findLaneContaining()` in Board.tsx searches the full `data` to resolve drag IDs. When filtering is active, the user sees card X in Lane A (filtered view), but if card X actually sits at a different position in the unfiltered data, `resolveOverLaneId()` and `findLaneContaining()` may resolve to a lane that contains hidden cards, causing the drop to target the wrong lane or producing a no-op.
+
+More critically: if filter state is stored inside `boardStore.data` (filtered data replaces canonical data), then `moveIssue`'s rollback via `set({ data: snapshot })` would restore a filtered snapshot, losing hidden cards permanently from the UI until a full refresh.
+
+**Why it happens:**
+The current architecture stores raw `BoardData` in the store and renders it directly. There is no layer between canonical data and displayed data. Adding filtering requires introducing that layer, and the mistake is to store filtered data as canonical state.
+
+**How to avoid:**
+- Keep filtering as a **derived computation** only. `boardStore.data` always holds the full unfiltered dataset. A separate `filterStore` (or slice) holds `{ status: string[], assignee: string[], category: string[] }`.
+- Create a pure function `filterIssues(issues: BacklogIssue[], filters: FilterState): BacklogIssue[]` used at render time.
+- DnD handlers (`handleDragStart`, `handleDragEnd`, `moveIssue`) always operate on the **unfiltered** canonical data via issue ID. Since IDs are stable regardless of filtering, `findLaneContaining(data, issueId)` works correctly.
+- Rollback in `moveIssue` continues to snapshot the full unfiltered `data` -- filters reapply automatically at render time.
+
+**Warning signs:**
+- After applying a filter, dragging a card results in a no-op (card snaps back)
+- Rollback after API failure shows cards that should be hidden by the active filter
+- `findLaneContaining` returns null for a card that is visible on screen
+
+**Phase to address:**
+Filtering phase (Phase 1). This architectural decision must be made first because sorting, reorder, and multi-select all depend on the same canonical-vs-derived data split.
 
 ---
 
-### Pitfall 1: milestoneId[] Full-Array Replacement Destroys Unmanaged Milestones
+### Pitfall 2: SortableContext Items Array Diverges from Rendered Cards
 
-**What goes wrong:** The Backlog API v2 PATCH `/api/v2/issues/:issueIdOrKey` treats `milestoneId[]` as a **full replacement** of the milestone array, not an append operation. If an issue has milestones `[A, B, C]` and the app only knows about milestone `B` (because `A` and `C` are outside the prefix filter), sending `milestoneId[]=B&milestoneId[]=D` silently deletes milestones `A` and `C`. This is a data-loss scenario.
+**What goes wrong:**
+`SortableContext` in Lane.tsx currently receives `issueIds = issues.map(i => i.id)`. When filtering hides some cards or sorting reorders them, this `items` array must exactly match the rendered card elements in count and order. If there is any mismatch -- e.g., `items` is `[1, 2, 3, 4, 5]` but only cards `[1, 3, 5]` are rendered because 2 and 4 are filtered out -- @dnd-kit looks for DOM nodes that do not exist, causing measurement failures and broken collision detection.
 
-**Why it happens:** The PROJECT.md explicitly notes this: "PATCH時にmilestoneId[]は全配列を置換するため、プレフィックス以外のマイルストーンは保持が必要." Developers often forget to read-before-write when the API looks like a simple PATCH, or they cache stale milestone data and send an outdated array.
+**Why it happens:**
+@dnd-kit's SortableContext uses the `items` array to compute sort indices and collision rectangles. Each ID in the array must correspond to a rendered `useSortable` node. Orphaned IDs in the array cause dnd-kit to silently fail collision detection for that lane.
 
-**Consequences:**
-- Silent data loss of milestones outside the app's visible scope
-- Users lose cross-project or non-prefixed milestone assignments with no undo
-- Particularly dangerous because it produces no error -- the API returns 200 OK
+**How to avoid:**
+- Create a single pipeline function: `getVisibleIssues(issues, filters, sortConfig) => BacklogIssue[]`.
+- Use its output for **both** the rendered cards and the `SortableContext items` prop.
+- Never compute items independently from rendered cards.
+- In Lane.tsx: `const visibleIssues = getVisibleIssues(issues, filters, sort); const itemIds = visibleIssues.map(i => i.id);` then render `visibleIssues` as cards and pass `itemIds` to `SortableContext`.
 
-**Prevention:**
-1. **Always GET the issue before PATCH.** Extract the current `milestone[]` array from the response. Merge the new milestone assignment with existing milestones that fall outside the app's managed prefix.
-2. **Build a `preserveExternalMilestones(currentMilestones, managedPrefix, newMilestoneId)` utility** that filters current milestones into "managed" (matching prefix) and "external" (not matching), replaces only the managed one, and returns the full merged array.
-3. **Unit test this utility exhaustively** with cases: no external milestones, multiple external milestones, issue with zero milestones, issue with the target milestone already present.
-4. **Never cache milestone arrays for PATCH.** Always fetch fresh before writing.
+**Warning signs:**
+- Console warnings about missing sortable nodes
+- Cards animate to wrong positions during drag
+- Collision detection works in unfiltered view but breaks after applying a filter
+- Empty lanes that should have visible cards (filter miscalculation)
 
-**Detection:** Compare milestone counts before/after PATCH in integration tests. Log warnings when the outgoing `milestoneId[]` array is shorter than the incoming one.
-
-**Phase impact:** Must be addressed in the **API integration phase** (core data layer). This is the single most dangerous pitfall in the entire project.
-
-**Confidence:** HIGH -- confirmed by PROJECT.md requirement and Backlog API documentation showing `milestoneId[]` as a "(Multiple)" parameter with full-replacement semantics.
-
----
-
-### Pitfall 2: onDragOver State Updates Cause Infinite Re-render Loops
-
-**What goes wrong:** When implementing cross-container drag (moving issues between milestone lanes), calling `setState` inside `onDragOver` creates a feedback loop. The state update triggers a re-render, which changes the DOM layout, which fires another `onDragOver` with a different collision target, which triggers another `setState`. When the dragged item is near the boundary between two lanes, `active` and `over` flip back and forth rapidly, triggering React's "Maximum update depth exceeded" error.
-
-**Why it happens:** dnd-kit's multi-container pattern requires state manipulation in `onDragOver` to show the item in the target container during drag. But the collision detection recalculates after every render, and if the item's position is ambiguous (near a boundary), it oscillates between containers.
-
-**Consequences:**
-- App crashes with React error during drag operations
-- Occurs unpredictably depending on cursor position, making it hard to catch in manual testing
-- Users experience frozen UI or lost drag state
-
-**Prevention:**
-1. **Debounce `onDragOver` handler** with a ~100ms delay to prevent rapid state oscillation. Use a ref-based debounce (not a state-based one) to avoid additional re-renders.
-2. **Implement custom collision detection** that filters out self-container collisions when the dragged item intersects its own current container. This prevents the flip-flop between source and target.
-3. **Guard against no-op state updates.** Before calling `setState` in `onDragOver`, check if the item is already in the target container. Skip the update if nothing changed.
-4. **Consider deferring visual container transfer to `onDragEnd` only.** This sacrifices the "live preview" of the item appearing in the target lane during drag, but eliminates the re-render loop entirely. For a kanban with ~7 lanes, the visual trade-off is acceptable.
-
-**Detection:** Automated test that programmatically drags an item to the exact midpoint between two lanes. Monitor React render counts during drag operations.
-
-**Phase impact:** Must be addressed in the **DnD implementation phase**. Cannot be deferred -- it is a show-stopper.
-
-**Confidence:** HIGH -- documented in [dnd-kit issue #1421](https://github.com/clauderic/dnd-kit/issues/1421) and [issue #1678](https://github.com/clauderic/dnd-kit/issues/1678), confirmed across multiple reporters.
+**Phase to address:**
+Filtering phase (Phase 1), reinforced in Sorting phase (Phase 2). Every feature that changes visible cards must flow through the same pipeline.
 
 ---
 
-### Pitfall 3: Optimistic Update Flicker on Drop (State Source Conflict)
+### Pitfall 3: Optimistic Bulk Move Creates Cascading Rollback Disaster
 
-**What goes wrong:** After a drag-and-drop completes, the card briefly snaps back to its original lane for a fraction of a second before settling into the new lane. This happens because dnd-kit's internal drag state and Zustand's store state are two separate sources of truth, and they disagree during the drop-to-API-response window.
+**What goes wrong:**
+Multi-select bulk move (e.g., 5 selected cards from Lane A to Lane B) fires 5 separate `updateIssueMilestone` API calls. The current `moveIssue` captures `snapshot = get().data` before the move and uses it for rollback. For bulk: if call 3 of 5 fails, `set({ data: snapshot })` reverts ALL 5 cards to pre-move state, even though calls 1 and 2 succeeded on the server. The UI now shows all 5 in Lane A, but the server has cards 1 and 2 in Lane B. State is permanently desynchronized.
 
-**Why it happens:** The sequence is: (1) `onDragEnd` fires, (2) dnd-kit clears its internal drag overlay, (3) Zustand state hasn't been updated yet (or the update hasn't triggered a re-render), (4) the component renders with the old Zustand state for one frame, (5) Zustand updates and the component renders correctly. The gap between steps 3 and 5 causes the flicker.
+Additionally, the `update_milestone` Rust function does a GET-then-PATCH for each issue (to preserve non-prefix milestones). For 5 cards, that is 10 API calls against the 150 update requests/minute limit.
 
-**Consequences:**
-- Visually jarring "rubber-banding" effect that undermines the optimistic UI goal
-- Users perceive the app as laggy or buggy despite fast actual updates
-- Particularly noticeable on slower machines or when React batching delays the re-render
+**Why it happens:**
+The v1.0 rollback pattern (full snapshot replacement) works for single-card moves but is fundamentally broken for multi-card operations. Each subsequent API call operates on progressively staler state if any preceding call modified the data.
 
-**Prevention:**
-1. **Use a temporary local state buffer** during the mutation window. Set temp state in `onDragEnd` synchronously, pass `tempState ?? zustandState` to the render tree, clear temp state after the API call resolves or rejects. This is the pattern recommended in [dnd-kit discussion #1522](https://github.com/clauderic/dnd-kit/discussions/1522).
-2. **Update Zustand state synchronously in `onDragEnd`** before the API call starts. Use `store.setState()` (not an async action) to ensure the state update is applied in the same React batch as the drop event.
-3. **Use `flushSync` from react-dom** if React batching delays the state update past the dnd-kit overlay teardown.
+**How to avoid:**
+- **Sequential execution with per-item tracking**: Apply all moves optimistically in one state update. Execute API calls sequentially (not parallel -- rate limits). Track success/failure per card.
+- **No full-snapshot rollback for bulk**: On failure of card N, keep cards 1..N-1 as moved (they succeeded on server), revert card N and cards N+1..end (unsent). Then trigger `fetchBoard()` to resync.
+- **Progress UI**: Show "Moving 3/5..." progress indicator. On partial failure, show "3 moved, 2 failed" with details.
+- **Rate limit guard**: With 150 update req/min and each bulk-move card needing 2 API calls (GET + PATCH), cap bulk selection at ~20 cards (40 API calls, well within the rate limit window). Show a warning if the user selects more.
+- **Post-operation resync**: After any bulk operation, always call `fetchBoard()` to ensure UI matches server truth.
 
-**Detection:** Slow down network requests artificially (add 2s delay to API calls) and visually inspect drop behavior. Automate with a Playwright test that captures screenshots at 60fps during drop.
+**Warning signs:**
+- After a bulk move error, card counts don't add up (some cards appear in neither lane)
+- After a bulk move, manual refresh shows different layout than pre-refresh
+- 429 errors in logs during bulk operations
+- UI freezes during bulk move (blocking sequential API calls without async handling)
 
-**Phase impact:** Must be addressed in the **DnD + optimistic update integration phase**. The DnD phase and API integration phase must be designed together for this to work.
-
-**Confidence:** HIGH -- documented in [dnd-kit discussion #1522](https://github.com/clauderic/dnd-kit/discussions/1522) with confirmed solution.
-
----
-
-### Pitfall 4: Backlog API Rate Limits Exhaust During Initial Load
-
-**What goes wrong:** Loading 7 milestone lanes with their issues requires multiple API calls. If each lane triggers a separate `GET /api/v2/issues` call (and possibly `GET /api/v2/versions` for milestone metadata), the app fires ~10-15 requests in rapid succession. The Backlog API has a per-minute rate limit of **150 requests for search operations** and **600 for reads**, but recommends "minimum 1-second delays between requests" for batch operations. On the free plan, limits are likely stricter (exact numbers not published -- must query `/api/v2/rateLimit`).
-
-**Why it happens:** Developers naturally parallelize API calls for performance. But Backlog's rate limiter is per-user (not per-API-key), meaning the desktop app shares the rate budget with any concurrent Backlog usage (browser, mobile, other tools).
-
-**Consequences:**
-- 429 Too Many Requests errors during initial data load
-- Partial data displayed (some lanes loaded, others empty)
-- Confusing UX where the app appears broken on first launch
-
-**Prevention:**
-1. **Implement sequential fetching with configurable delay** (start with 200ms between requests). Use the `X-RateLimit-Remaining` response header to dynamically adjust delay.
-2. **Fetch milestone list first, then batch issue queries.** Use `milestoneId[]` filter parameter on `GET /api/v2/issues` to fetch issues per milestone, but execute these sequentially, not in `Promise.all`.
-3. **Query `/api/v2/rateLimit` at app startup** to discover actual limits for the user's plan. Store these limits and use them to calibrate request spacing.
-4. **Show per-lane loading indicators** so users see progressive loading rather than a blank screen.
-5. **Implement request queue in the Rust backend** (not the frontend). The Tauri Rust layer should own the HTTP client and enforce rate limiting centrally, preventing the frontend from accidentally firing parallel requests.
-
-**Detection:** Monitor `X-RateLimit-Remaining` header in every response. Log warnings when remaining drops below 20% of limit. Alert on any 429 response.
-
-**Phase impact:** Must be addressed in the **API integration phase** as a core concern of the HTTP client layer.
-
-**Confidence:** HIGH -- rate limits confirmed via [Backlog API rate limit docs](https://developer.nulab.com/docs/backlog/rate-limit/) and [Get Rate Limit endpoint](https://developer.nulab.com/docs/backlog/api/2/get-rate-limit/) showing 150 update / 150 search / 600 read per window.
+**Phase to address:**
+Multi-select phase (Phase 4). This is the hardest phase architecturally -- must come after filtering, sorting, and intra-lane reorder are stable.
 
 ---
 
-## Moderate Pitfalls
+### Pitfall 4: Intra-Lane Reorder Triggers False Positives During Cross-Lane Drag
+
+**What goes wrong:**
+Currently, `handleDragEnd` in Board.tsx only acts when `fromLaneId !== toLaneId` (inter-lane move). Adding intra-lane reorder means `fromLaneId === toLaneId` with `active.id !== over.id` must trigger a reorder. But during a cross-lane drag, the card passes over sibling cards in the source lane before leaving it. With `SortableContext` + `verticalListSortingStrategy` already present in Lane.tsx, dnd-kit may fire `onDragOver` events with `over.id` pointing to sibling cards in the source lane, triggering false intra-lane reorders before the card even leaves the lane.
+
+**Why it happens:**
+The Lane component already wraps cards in `SortableContext` with `verticalListSortingStrategy`. This is inert in v1.0 because `handleDragEnd` ignores same-lane drops. But once intra-lane reorder is enabled, every `onDragOver` where `over.id` is a sibling card in the same lane becomes a potential reorder event. The user intends to drag to another lane, but the card first passes over siblings.
+
+**How to avoid:**
+- **Handle reorder only in `onDragEnd`, not `onDragOver`.** When `fromLaneId === toLaneId` and `active.id !== over.id` in `onDragEnd`, apply `arrayMove` to reorder. This means no live-preview of reorder position during drag, but it eliminates false triggers entirely.
+- **Alternative (with live preview):** Track `hasLeftSourceLane` flag. Set it to true when `onDragOver` detects the card over a different lane's item/container. Once true, ignore same-lane sort events for the rest of the drag. Reset on `onDragEnd`.
+- **Do NOT apply `arrayMove` in `onDragOver`** for same-container reorders unless you implement the `hasLeftSourceLane` guard. The current `closestCorners` collision detection is too aggressive for distinguishing "reorder intent" from "passing through."
+
+**Warning signs:**
+- Cards in the source lane shuffle when dragging a card toward another lane
+- After dropping in a different lane, the source lane's order has changed
+- Flickering card positions during cross-lane drag near the source lane boundary
+
+**Phase to address:**
+Intra-lane reorder phase (Phase 3). Must be carefully integrated with the existing inter-lane DnD in Board.tsx.
 
 ---
 
-### Pitfall 5: Multiple-Milestone Issues Create Ambiguous Drag Behavior
+### Pitfall 5: Local Sort Order Lost on Every Data Refresh
 
-**What goes wrong:** The PROJECT.md specifies that issues with multiple milestones should display in the earliest-start-date lane with a warning badge, and lane-to-lane DnD should be disabled for these issues. But the implementation is tricky: dnd-kit doesn't natively support "conditionally draggable based on data." If the draggable is rendered but the drop is rejected, the user sees a confusing animation of the card returning to its original position.
+**What goes wrong:**
+Intra-lane reorder is "local persistence" -- no API backing, saved to `plugin-store`. After a user reorders cards, `fetchBoard()` runs (manual refresh, or after a milestone move), returns Backlog's default order, and `set({ status: 'loaded', data, ... })` replaces the entire `boardStore.data`, destroying local order. New cards from the API that were not in the local order map have no defined position.
 
-**Why it happens:** Developers implement the "no DnD for multi-milestone issues" rule either too late (reject in `onDragEnd`, causing a wasted drag animation) or incorrectly (disable the draggable entirely, preventing intra-lane reordering which the spec allows).
+**Why it happens:**
+The current `fetchBoard` action does `set({ data })` with the raw API response, replacing all state. There is no merge step. Local sort order exists as supplementary metadata outside `boardStore.data`, but without a merge strategy, any refresh destroys it.
 
-**Prevention:**
-1. **Use dnd-kit's `disabled` property on `useSortable` to disable cross-container drag** but NOT intra-container drag. This requires a custom approach: allow dragging but restrict valid drop targets.
-2. **Better approach: Use the `accept` property on droppable containers** combined with a data attribute on draggable items. Tag multi-milestone items with `data: { multiMilestone: true }` and have lane droppables reject items with that flag (except their own lane).
-3. **Show a visual indicator immediately on drag start** (e.g., red outline, cursor change) for multi-milestone items to communicate "this cannot be moved between lanes" before the user attempts the drop.
-4. **Use `onDragStart` to set a "restricted drag" mode** in Zustand state that highlights only the current lane as a valid target.
+**How to avoid:**
+- Store local order in a **separate structure**: `{ [laneId]: number[] }` mapping lane IDs to ordered arrays of issue IDs. Persist to `plugin-store`.
+- After `fetchBoard()` completes, apply a **merge**: for each lane, take the local order array, filter out IDs that no longer exist in that lane, append new IDs (from API response) that are not in the local order (at the end).
+- On inter-lane move, update local order for both source lane (remove ID) and target lane (append ID).
+- When a sort mode (assignee/due date) is active, **disable manual reorder**. Sorting and manual reorder are mutually exclusive. The UI should clearly indicate which mode is active.
+- Provide a "reset order" action per lane to clear local customization.
 
-**Detection:** E2E test that creates an issue with 2+ milestones and attempts cross-lane drag. Verify the issue stays in its original lane.
+**Warning signs:**
+- User reorders cards, clicks refresh, and order reverts to API default
+- New cards from API are missing from the view (they exist in data but not in the local order map, and the rendering code only shows cards in the local order)
+- After moving a card between lanes, the card does not appear in the target lane's local order
 
-**Phase impact:** **DnD implementation phase**, but depends on API data model being established first.
-
-**Confidence:** MEDIUM -- based on dnd-kit API capabilities and the PROJECT.md requirement. Exact implementation pattern needs validation.
-
----
-
-### Pitfall 6: Optimistic Rollback Loses Concurrent Edits
-
-**What goes wrong:** User drags issue X from Lane A to Lane B. The app optimistically moves X to Lane B in Zustand. The API call fails (network error, 429, concurrent edit conflict). The app rolls back to the snapshot taken before the drag. But during the API round-trip, the user may have initiated another drag (issue Y from Lane B to Lane C). The rollback of issue X's move overwrites the optimistic state of issue Y's move, reverting both.
-
-**Why it happens:** Naive rollback replaces the entire store state with a pre-mutation snapshot. If multiple mutations are in flight, later mutations' optimistic state is discarded when an earlier mutation rolls back.
-
-**Consequences:**
-- Visual state jumps unexpectedly
-- Users lose confidence in the UI -- "I moved that card, where did it go?"
-- Can create impossible states where the UI shows something different from the server
-
-**Prevention:**
-1. **Use per-issue rollback, not per-store rollback.** Instead of snapshotting the entire Zustand store, snapshot only the affected issue's position (milestoneId and lane assignment). On rollback, restore only that issue's data.
-2. **Implement a mutation queue** that tracks in-flight optimistic updates. Each mutation has an ID, a target issue, and a rollback patch. Rollback applies only the relevant patch without affecting other in-flight mutations.
-3. **Re-fetch the issue from the API after rollback** to ensure the displayed state matches the server state, rather than relying solely on the snapshot.
-4. **Disable drag for issues with in-flight mutations** (show a spinner on the card) to prevent concurrent edits on the same issue.
-
-**Detection:** Integration test that fires two rapid drag operations and simulates failure of the first. Verify the second drag's optimistic state is preserved.
-
-**Phase impact:** **Optimistic update implementation phase.** Must be designed upfront, not retrofitted.
-
-**Confidence:** HIGH -- this is a well-documented edge case in optimistic update literature. See [TkDodo's concurrent optimistic updates article](https://tkdodo.eu/blog/concurrent-optimistic-updates-in-react-query).
+**Phase to address:**
+Intra-lane reorder phase (Phase 3). The merge strategy must be designed before implementing the persistence.
 
 ---
 
-### Pitfall 7: Tauri IPC Serialization Overhead on Frequent Operations
+### Pitfall 6: @dnd-kit Has No Native Multi-Select Drag Support
 
-**What goes wrong:** Every `invoke()` call from the React frontend to the Tauri Rust backend serializes arguments to JSON and deserializes the response from JSON. For a kanban board where users may rapidly drag multiple cards, each drag triggers at least one `invoke()` for the PATCH call. If the developer also routes reads through `invoke()` (e.g., for rate-limited sequential fetching), the serialization overhead accumulates.
+**What goes wrong:**
+Developers assume @dnd-kit supports dragging multiple items and try to pass multiple IDs to `useSortable`, create multiple concurrent drag operations, or render multiple `DragOverlay` instances. None of these work. @dnd-kit fundamentally supports one active draggable item at a time. Attempting workarounds causes "Maximum update depth exceeded" errors or silent failures.
 
-**Why it happens:** Tauri's IPC uses a JSON-RPC-like protocol. Arguments and return values must be serializable to JSON. On Windows specifically, benchmarks show ~200ms for 10MB payloads through WebView2, though typical issue payloads are small (< 10KB).
+**Why it happens:**
+[@dnd-kit Issue #120](https://github.com/clauderic/dnd-kit/issues/120), open since 2021 and still unresolved, confirms multi-select drag is not supported. The `useSortable({ id })` API takes a single ID. The `DragOverlay` renders one overlay. The `DndContext` tracks one `active` item.
 
-**Consequences:**
-- Perceived lag between drop and visual confirmation
-- On Windows, the overhead is measurably worse than macOS due to WebView2 serialization characteristics
-- If issue lists are large (100+ issues across 7 lanes), initial data transfer through IPC adds latency
+**How to avoid:**
+- Use the **Atlassian/Trello pattern**: user selects multiple cards (Ctrl+click / Shift+click), then drags any one of them. The `DragOverlayCard` shows a stacked-cards visual or count badge ("3 items selected"). On `DragEnd`, move ALL selected cards to the target lane -- not just the dragged one.
+- Selection state (`selectedIssueIds: Set<number>`) lives in a dedicated store slice, separate from board data.
+- The existing `moveIssue` is supplemented by `moveSelectedIssues(toLaneId)` that iterates over the selected set.
+- Multi-milestone cards (already DnD-disabled via `useSortable({ disabled })`) should also be non-selectable for bulk move.
 
-**Prevention:**
-1. **Keep IPC payloads minimal.** Do not send entire issue objects through IPC when only the milestoneId change is needed. For PATCH operations, send only `{ issueIdOrKey, milestoneIds }`.
-2. **Batch initial data loading in the Rust backend.** Instead of 7 separate `invoke()` calls (one per lane), have a single Rust command `fetch_all_lane_data()` that performs all API calls in Rust and returns the combined result in one IPC round-trip.
-3. **Cache in Rust, not React.** Keep the full issue data in Rust-side state (e.g., `tokio::sync::RwLock<HashMap>`) and only send display-relevant fields to the frontend.
-4. **Use Tauri's event system for push updates** instead of polling via `invoke()`. After a PATCH completes on the Rust side, emit a `tauri::Event` with the updated issue data.
+**Warning signs:**
+- Attempting to create multiple `useSortable` instances with the same ID
+- "Maximum update depth exceeded" during drag with selected items
+- Drag overlay renders the wrong card when multiple are selected
+- Selected cards deselect unexpectedly during drag
 
-**Detection:** Measure round-trip time of `invoke()` calls with `performance.now()` in development. Flag any call exceeding 50ms.
-
-**Phase impact:** **Architecture/scaffolding phase.** The decision of where to put the HTTP client (Rust vs. frontend) and what data crosses the IPC boundary must be made early.
-
-**Confidence:** MEDIUM -- IPC overhead is real but unlikely to be the bottleneck for this app's data volumes (~100-500 issues, ~7 lanes). Confirmed via [Tauri IPC discussion](https://github.com/tauri-apps/wry/issues/767) and [performance benchmarks](https://github.com/tauri-apps/tauri/discussions/5690).
-
----
-
-### Pitfall 8: Empty Lane Droppable Target Missing
-
-**What goes wrong:** When all issues are dragged out of a milestone lane, the lane becomes empty. If the sortable container has no children, dnd-kit has no droppable targets within that container. The user cannot drag items back into the empty lane.
-
-**Why it happens:** `SortableContext` registers droppable areas based on its children. No children means no droppable area. The container `div` itself is not automatically a drop target.
-
-**Consequences:**
-- Empty lanes become "dead zones" that cannot receive dropped items
-- Users must reload the app or use the Backlog web UI to move issues back
-- Particularly likely for the "Unassigned" lane, which may frequently empty out during planning
-
-**Prevention:**
-1. **Add a dedicated `useDroppable` hook on the lane container element** in addition to the `SortableContext` for its children. This ensures the lane itself is always a valid drop target, even when empty.
-2. **Render a placeholder element** inside empty lanes (e.g., "Drop issues here" message) that acts as a sortable item with a special ID. Filter it out when reading state.
-3. **Test explicitly with an empty lane** in every DnD test scenario.
-
-**Detection:** E2E test: drag all items out of a lane, then attempt to drag an item back in. Verify the drop is accepted.
-
-**Phase impact:** **DnD implementation phase.** Easy to miss, trivial to fix, but must be in the implementation checklist.
-
-**Confidence:** HIGH -- this is a known dnd-kit pattern documented in the [official examples](https://docs.dndkit.com/api-documentation/context-provider/collision-detection-algorithms) and the [multiple containers documentation](https://deepwiki.com/clauderic/dnd-kit/4.4-multiple-containers).
+**Phase to address:**
+Multi-select phase (Phase 4). Implement selection mechanism first (Phase 4a), then bulk DnD (Phase 4b).
 
 ---
 
-### Pitfall 9: API Key Storage in Plain Text
+### Pitfall 7: Click Handler Three-Way Conflict (Selection vs. DnD vs. URL Open)
 
-**What goes wrong:** The app requires a Backlog API key for authentication. If stored in a plain JSON config file (via `tauri-plugin-store`), the API key is readable by any process on the user's machine. This is a security issue, especially for a tool intended for team use.
+**What goes wrong:**
+IssueCard currently has two competing interactions: `onClick` opens the Backlog URL, and `useSortable` listeners handle drag. Adding multi-select introduces a third: Ctrl+click for toggle selection and Shift+click for range selection. Without careful event discrimination, clicking to select opens the URL, or a short drag toggles selection.
 
-**Why it happens:** `tauri-plugin-store` is the easiest persistence option and appears in most Tauri tutorials. Developers default to it without considering that API keys are credentials, not preferences.
+**Why it happens:**
+@dnd-kit's `useSortable` attaches pointer event listeners (`...listeners`) to the card. The existing `onClick` fires after a pointer-up that was not a drag (distance < 5px). Modifier key detection must happen in the same `onClick` handler, before the URL-open logic. But `onClick` fires after the dnd-kit listeners have already processed the event, creating timing issues.
 
-**Consequences:**
-- API keys readable in plain text on disk
-- Potential unauthorized access to Backlog projects
-- Security-conscious organizations may reject the tool
+**How to avoid:**
+- **Modifier key discrimination in onClick**: `if (e.ctrlKey || e.metaKey) { toggleSelection(issue.id); e.stopPropagation(); return; }` and `if (e.shiftKey) { rangeSelect(issue.id); e.stopPropagation(); return; }` before the URL-open logic. This is the standard pattern used by Finder, Jira, and Trello.
+- DnD listeners remain on the card element -- the PointerSensor's `activationConstraint: { distance: 5 }` naturally separates click (< 5px movement) from drag (>= 5px).
+- When at least one card is selected (selection mode active), consider changing default click to toggle selection, with a dedicated "open in browser" icon button. This avoids the confusing "click to deselect also opens the URL" scenario.
+- Ensure `e.stopPropagation()` is called for selection clicks to prevent event bubbling to parent DndContext handlers.
 
-**Prevention:**
-1. **Use OS-native credential storage.** On macOS use Keychain, on Windows use Credential Manager, on Linux use Secret Service. The community `tauri-plugin-keyring` (available for Tauri 2) wraps these platforms.
-2. **If `tauri-plugin-keyring` is not mature enough**, use `tauri-plugin-store` but encrypt the API key value before storage using a machine-specific key derivation (e.g., DPAPI on Windows, Keychain on macOS).
-3. **Never log API keys.** Ensure error messages and debug output mask the key.
-4. **Validate the API key on startup** with a lightweight API call (e.g., `GET /api/v2/space`) before attempting data loads.
+**Warning signs:**
+- Ctrl+click opens the URL instead of selecting the card
+- Dragging a card toggles its selection state on drop
+- Shift+click selects a range AND opens the URL
+- Selection state changes during drag operations
 
-**Detection:** Security review: search codebase for plain-text credential storage. Check the store file on disk for readable API keys.
+**Phase to address:**
+Multi-select phase (Phase 4). The click handler refactoring must be designed before implementing selection.
 
-**Phase impact:** **Connection settings phase.** Must be decided before implementing the settings persistence.
+## Technical Debt Patterns
 
-**Confidence:** MEDIUM -- `tauri-plugin-keyring` compatibility with Tauri 2 needs validation. The `Stronghold` plugin is being deprecated in Tauri v3, so it's not a long-term solution either. See [Tauri secure storage discussion](https://github.com/orgs/tauri-apps/discussions/7846).
+| Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
+|----------|-------------------|----------------|-----------------|
+| Store filtered data as canonical state | Simpler component code | Rollback/refresh destroys hidden cards, DnD state desyncs | Never |
+| Parallel API calls for bulk move | Faster bulk operation completion | Backlog 150 update/min rate limit hit, partial failure chaos | Never for this API |
+| Local sort order in useState (not plugin-store) | Quick prototype | Lost on any component unmount/remount, not persisted | Only for initial prototype, replace before merge |
+| Single snapshot rollback for bulk operations | Reuse existing moveIssue pattern unchanged | Server-UI desync on partial failure | Never for multi-card operations |
+| Apply arrayMove in onDragOver for intra-lane sort | Smooth live-preview reorder | False reorders during cross-lane drags, flickering | Only with hasLeftSourceLane guard implemented |
+| Filter options computed on every render | No memoization boilerplate | Sluggish filter dropdown on 200+ cards | Acceptable for MVP if cards < 100, must memoize for scale |
 
----
+## Integration Gotchas
 
-## Minor Pitfalls
+| Integration | Common Mistake | Correct Approach |
+|-------------|----------------|------------------|
+| Backlog PATCH + bulk move | Parallel PATCH calls hitting 150/min rate limit | Sequential calls with X-RateLimit-Remaining monitoring; stop on approaching limit |
+| Backlog PATCH + milestoneId[] in bulk | Using stale milestone data from first fetch for all PATCHes | Re-fetch issue or batch-fetch all issues before PATCH sequence starts |
+| SortableContext + filter | Passing unfiltered items array while rendering filtered cards | Derive both from single `getVisibleIssues()` pipeline |
+| SortableContext + sort | Passing unsorted items array while rendering sorted cards | Same pipeline: filter then sort, use result for both items and render |
+| closestCorners + empty-after-filter lanes | Lane has useDroppable but SortableContext has zero items; collision detection may miss the lane | Verify empty-lane droppability after filter (already have useDroppable on lane container -- should work, but test explicitly) |
+| plugin-store + rapid reorder writes | Writing on every drag event (many rapid writes) | Debounce writes to plugin-store (500ms after last reorder) |
+| Zustand selectors + filter state | Creating new filter function on every render | Memoize selectors with `useShallow` or stable references |
+| DragOverlay + multi-select | Rendering standard DragOverlayCard for multi-select drag | Check `selectedIssueIds.size > 1` in DragOverlay and render count badge |
 
----
+## Performance Traps
 
-### Pitfall 10: Collision Detection Algorithm Mismatch for Horizontal Kanban
+| Trap | Symptoms | Prevention | When It Breaks |
+|------|----------|------------|----------------|
+| Re-rendering all 7 lanes on filter toggle | Visible lag when clicking filter checkbox | `React.memo` on Lane component; filter selector returns stable reference when filter result unchanged | 50+ cards across lanes |
+| Recomputing memberBreakdown for filtered views | LaneHeader sluggish during filter change | `useMemo` keyed on filtered issues array identity | 100+ cards with frequent filter toggling |
+| Synchronous plugin-store writes during reorder | UI micro-freeze on each drag | Async write with 500ms debounce | Rapid consecutive reorders |
+| Computing unique filter options (assignees/statuses/categories) on every render | Filter dropdown opens slowly | Cache option lists; invalidate on fetchBoard only | 200+ unique assignees or categories |
+| Rendering large selection set highlights | Jank when selecting 20+ cards via Shift+click | Batch selection state updates; use CSS class toggle instead of re-render | 30+ selected cards |
 
-**What goes wrong:** The default `rectIntersection` collision detection works poorly for kanban boards where lanes are stacked horizontally. It may detect the lane container as the target rather than the correct position within the lane. The dragged card appears to "skip" positions or target the wrong lane.
+## Security Mistakes
 
-**Prevention:**
-1. **Use `closestCorners` instead of `closestCenter` or `rectIntersection`** for kanban layouts. The official docs recommend this specifically for stacked droppable containers.
-2. **Implement a custom collision detection function** that first identifies the target lane (using `pointerWithin`) and then identifies the position within the lane (using `closestCenter` among that lane's items).
-3. Base the custom collision detection on the dnd-kit `MultipleContainers.tsx` example.
+| Mistake | Risk | Prevention |
+|---------|------|------------|
+| Storing filter preferences with raw user/assignee data | Minor privacy concern if plugin-store file is shared | Store assignee IDs (not names) in filter preferences; resolve names at render time |
+| Not validating issue IDs before bulk move | Stale IDs cause 404 errors on PATCH; confusing error messages | Validate all IDs exist in current boardStore.data before API calls |
 
-**Phase impact:** DnD implementation phase.
+## UX Pitfalls
 
-**Confidence:** HIGH -- explicitly documented in [dnd-kit collision detection docs](https://docs.dndkit.com/api-documentation/context-provider/collision-detection-algorithms).
+| Pitfall | User Impact | Better Approach |
+|---------|-------------|-----------------|
+| Filter hides all cards in a lane, lane appears empty | User thinks data is missing | Show "N件のカードがフィルタで非表示" in empty-after-filter lanes |
+| No visual indicator that filter is active | User forgets filter is on, wonders why cards are missing | Active filter chip/badge near board header; one-click "clear all filters" |
+| Sort and manual reorder conflict silently | User reorders cards, then activating sort overrides silently | Disable manual reorder when sort active; show clear mode indicator |
+| No progress feedback during bulk move | User doesn't know if bulk operation is in progress or frozen | Progress indicator "3/5 moved"; disable board interaction during bulk |
+| Shift+click range includes hidden (filtered) cards | User selects range that moves cards they cannot see | Range selection operates only on visible (post-filter) card list |
+| Drag overlay doesn't indicate multi-select count | User drags one card, doesn't realize others will also move | Stacked card visual or badge "3件選択中" on DragOverlay |
+| No keyboard shortcut to clear selection | Deselecting requires clicking empty space | Escape clears selection; show "Esc to deselect" hint when cards selected |
+| Sorting resets on refresh without indication | User sets sort, refreshes, sort reverts to default | Persist sort preference in plugin-store; restore on load |
 
----
+## "Looks Done But Isn't" Checklist
 
-### Pitfall 11: Zustand Re-renders Entire Board on Single Issue Update
+- [ ] **Filtering:** Filter state survives `fetchBoard()` refresh -- verify filter remains active after data reload
+- [ ] **Filtering:** Empty-after-filter lanes show informative message, not just EmptyLane placeholder
+- [ ] **Filtering:** LaneHeader issue count and memberBreakdown reflect **filtered** card count, not total
+- [ ] **Filtering:** DnD still works correctly with filter active (drag a visible card, it moves to correct lane)
+- [ ] **Sorting:** Sort is stable -- cards with identical sort keys maintain consistent relative order across re-renders
+- [ ] **Sorting:** Sort direction (asc/desc) indicator visible; clicking sort field toggles direction
+- [ ] **Sorting:** Changing sort field does not clear active filters
+- [ ] **Sorting:** Sort preference persists across app restart
+- [ ] **Intra-lane reorder:** Order persists across app restart via plugin-store
+- [ ] **Intra-lane reorder:** Order survives fetchBoard() refresh (merge strategy correctly handles new/removed cards)
+- [ ] **Intra-lane reorder:** Manual reorder is disabled/hidden when sort mode is active
+- [ ] **Intra-lane reorder:** Multi-milestone cards (DnD disabled) still display in their correct local-order position
+- [ ] **Intra-lane reorder:** Cross-lane drag does not accidentally reorder source lane
+- [ ] **Multi-select:** Selection clears after successful bulk move completes
+- [ ] **Multi-select:** Escape key clears selection
+- [ ] **Multi-select:** Selected cards from multiple different lanes all move to the drop target lane
+- [ ] **Multi-select:** Multi-milestone cards cannot be selected for bulk move
+- [ ] **Multi-select:** Partial failure UI shows which specific cards failed
+- [ ] **Multi-select:** Board resyncs with server (fetchBoard) after bulk operation
 
-**What goes wrong:** A naive Zustand store that holds all issues in a single flat array causes every lane component to re-render when any issue changes, because the selector returns a new array reference on every state change.
+## Recovery Strategies
 
-**Prevention:**
-1. **Structure the Zustand store by milestone lane** (e.g., `{ lanes: { [milestoneId]: Issue[] } }`), not as a flat list. Lane components select only their own data.
-2. **Use Zustand's `useShallow` or custom equality functions** in selectors to prevent re-renders when unrelated data changes.
-3. **Memoize lane components** with `React.memo()` and ensure props are referentially stable.
-4. **For DnD operations, consider `zustand-mutative`** instead of `immer` middleware -- it is 10x faster for array operations on large datasets (5,236 ops/sec vs 255 ops/sec in 50K-array benchmarks). However, for this app's scale (~500 issues), manual spread operators are sufficient and avoid the dependency.
+| Pitfall | Recovery Cost | Recovery Steps |
+|---------|---------------|----------------|
+| Filtered view breaks DnD state | LOW | Call `fetchBoard()` to resync; filters reapply automatically from separate filter state |
+| SortableContext items mismatch | LOW | Fix the derived computation pipeline; no data loss |
+| Bulk move partial failure desync | MEDIUM | Call `fetchBoard()` to resync with server; show user summary of succeeded/failed cards |
+| Intra-lane order lost on refresh | LOW | User re-reorders manually, or use "reset order" to clear and start fresh |
+| Local sort order file corrupted | LOW | Delete the plugin-store entry for lane orders; cards revert to API default order |
+| Click handler conflicts | LOW | Refactor event handler priority; add e2e test for each interaction mode |
+| Rate limit hit during bulk move | MEDIUM | Wait 60 seconds for rate limit reset; retry failed cards or do full resync |
+| False intra-lane reorder during cross-lane drag | LOW | Order reverts on next fetchBoard; implement hasLeftSourceLane guard |
 
-**Phase impact:** State management design phase (early architecture).
+## Pitfall-to-Phase Mapping
 
-**Confidence:** HIGH -- standard Zustand performance pattern.
-
----
-
-### Pitfall 12: Stale Closure in DnD Event Handlers
-
-**What goes wrong:** `onDragEnd` and `onDragOver` callbacks close over stale Zustand state if defined inline or with outdated dependency arrays. The handler reads old issue positions and applies incorrect state updates.
-
-**Prevention:**
-1. **Use Zustand's `getState()` inside event handlers** instead of relying on state from `useStore()` selectors. `getState()` always returns the current state, avoiding stale closures.
-2. **Wrap handlers in `useCallback` with correct dependencies**, or use refs to always hold the latest handler reference.
-3. **Never read state from a selector inside `onDragEnd`** -- always use `store.getState()` for the freshest data.
-
-**Phase impact:** DnD implementation phase.
-
-**Confidence:** HIGH -- common React closure pitfall, amplified by dnd-kit's callback-heavy API.
-
----
-
-### Pitfall 13: Backlog API Pagination Silently Truncates Results
-
-**What goes wrong:** `GET /api/v2/issues` returns a maximum of 100 issues per request by default. If a milestone has more than 100 issues, the app silently shows an incomplete list without any indication to the user.
-
-**Prevention:**
-1. **Implement pagination** using `offset` and `count` parameters. Loop until fewer results than `count` are returned.
-2. **Show total count in lane header** (the API returns `X-Total-Count` or similar) and compare with loaded count to detect truncation.
-3. **Set `count=100` (maximum)** per request and paginate if the response contains exactly 100 items.
-
-**Phase impact:** API integration phase.
-
-**Confidence:** MEDIUM -- Backlog API pagination behavior confirmed in [issue list docs](https://developer.nulab.com/docs/backlog/api/2/get-issue-list/), but exact max per page needs validation.
-
----
-
-## Phase-Specific Warnings
-
-| Phase Topic | Likely Pitfall | Mitigation |
-|---|---|---|
-| Connection settings | API key in plain text (Pitfall 9) | Use OS-native credential storage via keyring plugin |
-| API integration layer | milestoneId[] full replacement (Pitfall 1) | Read-before-write with external milestone preservation |
-| API integration layer | Rate limit exhaustion (Pitfall 4) | Sequential fetching with rate limit header monitoring |
-| API integration layer | Pagination truncation (Pitfall 13) | Paginate all list endpoints |
-| State management design | Store structure causes full-board re-renders (Pitfall 11) | Structure store by lane, use shallow selectors |
-| State management design | Stale closures in DnD handlers (Pitfall 12) | Use `getState()` in callbacks |
-| DnD implementation | Infinite re-render loop on drag (Pitfall 2) | Custom collision detection + debounced onDragOver |
-| DnD implementation | Empty lane dead zone (Pitfall 8) | useDroppable on lane container |
-| DnD implementation | Wrong collision detection for horizontal layout (Pitfall 10) | Use closestCorners, implement custom strategy |
-| DnD + multi-milestone | Ambiguous drag for multi-milestone issues (Pitfall 5) | Conditional drop acceptance + visual indicators |
-| Optimistic updates | Drop flicker (Pitfall 3) | Temp state buffer during mutation window |
-| Optimistic updates | Concurrent rollback destroys other edits (Pitfall 6) | Per-issue rollback patches, not full-store snapshots |
-| Architecture | IPC overhead accumulation (Pitfall 7) | Batch API calls in Rust, minimize IPC payload |
-
----
+| Pitfall | Prevention Phase | Verification |
+|---------|------------------|--------------|
+| Filtered view corrupts DnD (P1) | Phase 1 (Filtering) | Test: apply filter, drag visible card, verify it moves correctly and hidden cards are unaffected |
+| SortableContext items mismatch (P2) | Phase 1 + Phase 2 | Test: filter cards, verify SortableContext items count equals rendered card count per lane |
+| Bulk move cascading rollback (P3) | Phase 4 (Multi-select) | Test: mock API failure on 3rd of 5 cards; verify cards 1-2 stay moved, cards 3-5 revert |
+| Intra-lane vs cross-lane conflict (P4) | Phase 3 (Reorder) | Test: drag card past siblings toward another lane; verify source lane order unchanged after drop |
+| Local order lost on refresh (P5) | Phase 3 (Reorder) | Test: reorder cards, call fetchBoard, verify custom order persists; add new card via API, verify it appends |
+| No native multi-select DnD (P6) | Phase 4 (Multi-select) | Test: select 3 cards, drag one, verify all 3 move and DragOverlay shows count |
+| Click handler conflicts (P7) | Phase 4 (Multi-select) | Test: Ctrl+click selects without URL open; plain click opens URL; drag moves without selecting |
 
 ## Sources
 
-- [Backlog API Rate Limit Documentation](https://developer.nulab.com/docs/backlog/rate-limit/) -- HIGH confidence
-- [Backlog API Get Rate Limit Endpoint](https://developer.nulab.com/docs/backlog/api/2/get-rate-limit/) -- HIGH confidence (confirmed 150 update / 150 search / 600 read limits)
-- [Backlog API Update Issue](https://developer.nulab.com/docs/backlog/api/2/update-issue/) -- HIGH confidence
-- [Backlog API Tips (Multiple Parameters)](https://developer.nulab.com/docs/backlog/tips/) -- HIGH confidence
-- [dnd-kit Issue #1421: Too Many Re-renders in Multiple Containers](https://github.com/clauderic/dnd-kit/issues/1421) -- HIGH confidence
-- [dnd-kit Issue #1678: Maximum Update Depth Exceeded](https://github.com/clauderic/dnd-kit/issues/1678) -- HIGH confidence
-- [dnd-kit Discussion #1522: Item Flicker on Drop with Optimistic Updates](https://github.com/clauderic/dnd-kit/discussions/1522) -- HIGH confidence
-- [dnd-kit Issue #994: Sortable Re-renders All Items](https://github.com/clauderic/dnd-kit/issues/994) -- HIGH confidence
-- [dnd-kit Collision Detection Algorithms](https://docs.dndkit.com/api-documentation/context-provider/collision-detection-algorithms) -- HIGH confidence
-- [dnd-kit Multiple Containers](https://deepwiki.com/clauderic/dnd-kit/4.4-multiple-containers) -- MEDIUM confidence
-- [Tauri IPC Discussion (wry #767)](https://github.com/tauri-apps/wry/issues/767) -- MEDIUM confidence
-- [Tauri IPC Performance Discussion](https://github.com/tauri-apps/tauri/discussions/5690) -- MEDIUM confidence
-- [Tauri Stronghold Plugin](https://v2.tauri.app/plugin/stronghold/) -- HIGH confidence (noted deprecation in v3)
-- [Tauri Secure Storage Discussion](https://github.com/orgs/tauri-apps/discussions/7846) -- MEDIUM confidence
-- [TkDodo: Concurrent Optimistic Updates](https://tkdodo.eu/blog/concurrent-optimistic-updates-in-react-query) -- HIGH confidence
-- [Zustand Mutative Performance Benchmarks](https://github.com/mutativejs/zustand-mutative) -- MEDIUM confidence
+- [@dnd-kit Issue #120: Multi-select drag support](https://github.com/clauderic/dnd-kit/issues/120) -- No built-in support confirmed, open since 2021
+- [@dnd-kit Issue #1188: Sorting too complicated](https://github.com/clauderic/dnd-kit/issues/1188) -- Cross-container sort complexity
+- [@dnd-kit Issue #833: Async reordering and drop animation](https://github.com/clauderic/dnd-kit/issues/833) -- Reorder timing issues
+- [@dnd-kit Issue #1421: Too many re-renders in multiple containers](https://github.com/clauderic/dnd-kit/issues/1421) -- Performance with multiple SortableContexts
+- [@dnd-kit Discussion #1313: Multiple draggable elements](https://github.com/clauderic/dnd-kit/discussions/1313) -- Community workarounds for multi-drag
+- [@dnd-kit SortableContext Docs](https://docs.dndkit.com/presets/sortable/sortable-context) -- Items array must match rendered nodes
+- [@dnd-kit Collision Detection Docs](https://docs.dndkit.com/api-documentation/context-provider/collision-detection-algorithms) -- Custom collision strategies
+- [Backlog API Rate Limit](https://developer.nulab.com/docs/backlog/rate-limit/) -- 150 update req/min, per-user not per-key
+- [Backlog API Update Issue](https://developer.nulab.com/docs/backlog/api/2/update-issue/) -- milestoneId[] full-array replacement
+- [Zustand Stale Closure Discussion #1394](https://github.com/pmndrs/zustand/discussions/1394) -- Use getState() in action handlers
+- [Zustand Stale Closure Discussion #784](https://github.com/pmndrs/zustand/discussions/784) -- Closure pitfalls
+- Codebase analysis: `boardStore.ts` (moveIssue rollback pattern), `Board.tsx` (DnD handler structure), `Lane.tsx` (SortableContext usage), `IssueCard.tsx` (click handler + useSortable), `client.rs` (rate limiting + milestone preservation)
+
+---
+*Pitfalls research for: mileboard v1.1 -- filtering, sorting, intra-lane reorder, multi-select bulk move*
+*Researched: 2026-04-08*
