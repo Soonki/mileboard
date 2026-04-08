@@ -77,3 +77,12 @@
   font-weight: var(--font-weight-regular);
   color: var(--color-disabled);
 }
+
+.cardDragging {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.cardDragDisabled {
+  cursor: not-allowed;
+}

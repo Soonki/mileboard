@@ -5,6 +5,7 @@ import '@testing-library/jest-dom';
 import { IssueCard } from './IssueCard';
 import type { BacklogIssue } from '../../types/backlog';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { useSortable } from '@dnd-kit/sortable';
 
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: vi.fn((selector: (s: { settings: { hostUrl: string } }) => string) =>
@@ -47,67 +48,88 @@ function createMockIssue(overrides?: Partial<BacklogIssue>): BacklogIssue {
   };
 }
 
+const defaultProps = {
+  laneId: 'milestone-100',
+  milestonePrefix: 'Sprint',
+};
+
 describe('IssueCard', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(useSortable).mockReturnValue({
+      attributes: {},
+      listeners: {},
+      setNodeRef: vi.fn(),
+      transform: null,
+      transition: null,
+      isDragging: false,
+    } as unknown as ReturnType<typeof useSortable>);
+  });
+
   it('renders issue key', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     expect(screen.getByText('TEST-1')).toBeInTheDocument();
   });
 
   it('renders summary text', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     expect(screen.getByText('テスト課題のサマリー')).toBeInTheDocument();
   });
 
   it('renders status badge', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     expect(screen.getByText('未対応')).toBeInTheDocument();
   });
 
   it('renders assignee name', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     expect(screen.getByText('山田太郎')).toBeInTheDocument();
   });
 
   it('renders --- when assignee is null', () => {
-    render(<IssueCard issue={createMockIssue({ assignee: null })} />);
+    render(
+      <IssueCard issue={createMockIssue({ assignee: null })} {...defaultProps} />,
+    );
     expect(screen.getByText('---')).toBeInTheDocument();
   });
 
   it('renders priority indicator', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     expect(screen.getByText('▲▲')).toBeInTheDocument();
   });
 
   it('renders no priority indicator when priority is null', () => {
-    render(<IssueCard issue={createMockIssue({ priority: null })} />);
+    render(
+      <IssueCard issue={createMockIssue({ priority: null })} {...defaultProps} />,
+    );
     expect(screen.queryByText('▲')).not.toBeInTheDocument();
   });
 
   it('calls openUrl with correct Backlog URL on click', async () => {
     const user = userEvent.setup();
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     await user.click(screen.getByRole('link'));
     expect(openUrl).toHaveBeenCalledWith('https://example.backlog.com/view/TEST-1');
   });
 
   it('strips https:// from hostUrl before URL construction', async () => {
     vi.mocked(useSettingsStore).mockImplementation(
-      (selector: (s: { settings: { hostUrl: string } }) => string) =>
-        selector({ settings: { hostUrl: 'https://example.backlog.com' } }),
+      ((selector: (s: { settings: { hostUrl: string } }) => string) =>
+        selector({ settings: { hostUrl: 'https://example.backlog.com' } })) as typeof useSettingsStore,
     );
     const user = userEvent.setup();
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     await user.click(screen.getByRole('link'));
     expect(openUrl).toHaveBeenCalledWith('https://example.backlog.com/view/TEST-1');
   });
 
   it('strips http:// from hostUrl before URL construction', async () => {
     vi.mocked(useSettingsStore).mockImplementation(
-      (selector: (s: { settings: { hostUrl: string } }) => string) =>
-        selector({ settings: { hostUrl: 'http://example.backlog.com' } }),
+      ((selector: (s: { settings: { hostUrl: string } }) => string) =>
+        selector({ settings: { hostUrl: 'http://example.backlog.com' } })) as typeof useSettingsStore,
     );
     const user = userEvent.setup();
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     await user.click(screen.getByRole('link'));
     expect(openUrl).toHaveBeenCalledWith('https://example.backlog.com/view/TEST-1');
   });
@@ -115,20 +137,160 @@ describe('IssueCard', () => {
   it('does not throw when openUrl fails', async () => {
     vi.mocked(openUrl).mockRejectedValueOnce(new Error('opener failed'));
     const user = userEvent.setup();
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     await expect(user.click(screen.getByRole('link'))).resolves.not.toThrow();
   });
 
   it('has role="link" and aria-label with issue key', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     const link = screen.getByRole('link', { name: 'TEST-1をBacklogで開く' });
     expect(link).toBeInTheDocument();
   });
 
   it('passes status color to StatusBadge', () => {
-    render(<IssueCard issue={createMockIssue()} />);
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
     const badge = screen.getByLabelText('未対応');
-    // StatusBadge with color="#ed8077" applies inline backgroundColor
     expect(badge.style.backgroundColor).toBe('rgb(237, 128, 119)');
+  });
+
+  it('calls useSortable with issue id', () => {
+    render(<IssueCard issue={createMockIssue({ id: 42 })} {...defaultProps} />);
+    expect(useSortable).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 42 }),
+    );
+  });
+
+  it('shows WarningBadge when issue has multiple prefix milestones', () => {
+    const issue = createMockIssue({
+      milestone: [
+        {
+          id: 100,
+          projectId: 1,
+          name: 'Sprint-2504',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+        {
+          id: 200,
+          projectId: 1,
+          name: 'Sprint-2505',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+      ],
+    });
+    render(<IssueCard issue={issue} {...defaultProps} />);
+    expect(screen.getByText('\u26A0')).toBeInTheDocument();
+  });
+
+  it('does not show WarningBadge for single milestone', () => {
+    const issue = createMockIssue({
+      milestone: [
+        {
+          id: 100,
+          projectId: 1,
+          name: 'Sprint-2504',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+      ],
+    });
+    render(<IssueCard issue={issue} {...defaultProps} />);
+    expect(screen.queryByText('\u26A0')).not.toBeInTheDocument();
+  });
+
+  it('disables sorting for multi-milestone cards', () => {
+    const issue = createMockIssue({
+      milestone: [
+        {
+          id: 100,
+          projectId: 1,
+          name: 'Sprint-2504',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+        {
+          id: 200,
+          projectId: 1,
+          name: 'Sprint-2505',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+      ],
+    });
+    render(<IssueCard issue={issue} {...defaultProps} />);
+    expect(useSortable).toHaveBeenCalledWith(
+      expect.objectContaining({ disabled: true }),
+    );
+  });
+
+  it('enables sorting for non-multi-milestone cards', () => {
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
+    expect(useSortable).toHaveBeenCalledWith(
+      expect.objectContaining({ disabled: false }),
+    );
+  });
+
+  it('applies cardDragging class when isDragging is true', () => {
+    vi.mocked(useSortable).mockReturnValue({
+      attributes: {},
+      listeners: {},
+      setNodeRef: vi.fn(),
+      transform: null,
+      transition: null,
+      isDragging: true,
+    } as unknown as ReturnType<typeof useSortable>);
+    const { container } = render(
+      <IssueCard issue={createMockIssue()} {...defaultProps} />,
+    );
+    const card = container.firstChild as HTMLElement;
+    expect(card.className).toContain('cardDragging');
+  });
+
+  it('applies cardDragDisabled class for multi-milestone cards', () => {
+    const issue = createMockIssue({
+      milestone: [
+        {
+          id: 100,
+          projectId: 1,
+          name: 'Sprint-2504',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+        {
+          id: 200,
+          projectId: 1,
+          name: 'Sprint-2505',
+          description: null,
+          startDate: null,
+          releaseDueDate: null,
+          archived: false,
+          displayOrder: 0,
+        },
+      ],
+    });
+    const { container } = render(
+      <IssueCard issue={issue} {...defaultProps} />,
+    );
+    const card = container.firstChild as HTMLElement;
+    expect(card.className).toContain('cardDragDisabled');
   });
 });

@@ -3,6 +3,7 @@ import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import { Lane } from './Lane';
 import type { BacklogIssue } from '../../types/backlog';
+import { useDroppable } from '@dnd-kit/core';
 
 function createMockIssue(overrides?: Partial<BacklogIssue>): BacklogIssue {
   return {
@@ -37,10 +38,16 @@ function createMockIssue(overrides?: Partial<BacklogIssue>): BacklogIssue {
   };
 }
 
+const defaultProps = {
+  laneId: 'milestone-1',
+  milestonePrefix: 'Sprint',
+};
+
 describe('Lane', () => {
   it('renders lane header with milestone name', () => {
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -53,6 +60,7 @@ describe('Lane', () => {
   it('renders date range in header', () => {
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate="2025-04-01"
         releaseDueDate="2025-04-30"
@@ -69,6 +77,7 @@ describe('Lane', () => {
     ];
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -82,6 +91,7 @@ describe('Lane', () => {
   it('renders empty lane when no issues', () => {
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -94,6 +104,7 @@ describe('Lane', () => {
   it('has aria-label with lane name', () => {
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -110,6 +121,7 @@ describe('Lane', () => {
     ];
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -134,6 +146,7 @@ describe('Lane', () => {
     ];
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -146,6 +159,7 @@ describe('Lane', () => {
   it('does not show toggle button when issues array is empty', () => {
     render(
       <Lane
+        {...defaultProps}
         name="Sprint 2504"
         startDate={null}
         releaseDueDate={null}
@@ -153,5 +167,19 @@ describe('Lane', () => {
       />,
     );
     expect(screen.queryByRole('button')).not.toBeInTheDocument();
+  });
+
+  it('calls useDroppable with laneId', () => {
+    render(
+      <Lane
+        laneId="milestone-42"
+        milestonePrefix="Sprint"
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={[]}
+      />,
+    );
+    expect(useDroppable).toHaveBeenCalledWith({ id: 'milestone-42' });
   });
 });

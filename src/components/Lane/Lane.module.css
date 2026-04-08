@@ -14,3 +14,7 @@
   overflow-y: auto;
   flex: 1;
 }
+
+.laneDropTarget {
+  background-color: var(--color-drop-target);
+}

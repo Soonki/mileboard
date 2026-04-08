@@ -1,3 +1,8 @@
+import { useDroppable } from '@dnd-kit/core';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
 import type { BacklogIssue } from '../../types/backlog';
 import { computeMemberBreakdown } from '../../utils/memberBreakdown';
 import { LaneHeader } from '../LaneHeader/LaneHeader';
@@ -6,18 +11,34 @@ import { EmptyLane } from '../EmptyLane/EmptyLane';
 import styles from './Lane.module.css';
 
 interface LaneProps {
+  laneId: string;
   name: string;
   startDate: string | null;
   releaseDueDate: string | null;
   issues: BacklogIssue[];
+  milestonePrefix: string;
 }
 
-export function Lane({ name, startDate, releaseDueDate, issues }: LaneProps) {
+export function Lane({
+  laneId,
+  name,
+  startDate,
+  releaseDueDate,
+  issues,
+  milestonePrefix,
+}: LaneProps) {
+  const { setNodeRef, isOver } = useDroppable({ id: laneId });
   const issueCount = issues.length;
   const memberBreakdown = computeMemberBreakdown(issues);
+  const issueIds = issues.map((i) => i.id);
 
   return (
-    <div className={styles.lane} role="region" aria-label={name}>
+    <div
+      ref={setNodeRef}
+      className={`${styles.lane} ${isOver ? styles.laneDropTarget : ''}`}
+      role="region"
+      aria-label={name}
+    >
       <LaneHeader
         name={name}
         startDate={startDate}
@@ -25,13 +46,22 @@ export function Lane({ name, startDate, releaseDueDate, issues }: LaneProps) {
         issueCount={issueCount}
         memberBreakdown={memberBreakdown}
       />
-      <div className={styles.cardList}>
-        {issues.length === 0 ? (
-          <EmptyLane />
-        ) : (
-          issues.map((issue) => <IssueCard key={issue.id} issue={issue} />)
-        )}
-      </div>
+      <SortableContext items={issueIds} strategy={verticalListSortingStrategy}>
+        <div className={styles.cardList}>
+          {issues.length === 0 ? (
+            <EmptyLane />
+          ) : (
+            issues.map((issue) => (
+              <IssueCard
+                key={issue.id}
+                issue={issue}
+                laneId={laneId}
+                milestonePrefix={milestonePrefix}
+              />
+            ))
+          )}
+        </div>
+      </SortableContext>
     </div>
   );
 }

@@ -5,17 +5,28 @@ import { Board } from './Board';
 import type { BoardData } from '../../types/board';
 
 const mockFetchBoard = vi.fn();
+const mockMoveIssue = vi.fn();
 
 let mockStoreState: Record<string, unknown> = {};
 
 vi.mock('../../stores/boardStore', () => ({
   useBoardStore: (selector: (s: Record<string, unknown>) => unknown) =>
     selector(mockStoreState),
+  findIssueInBoardData: vi.fn(() => null),
+}));
+
+vi.mock('../../stores/settingsStore', () => ({
+  useSettingsStore: vi.fn(
+    (selector: (s: { settings: { milestonePrefix: string } }) => string) =>
+      selector({ settings: { milestonePrefix: 'Sprint' } }),
+  ),
 }));
 
 vi.mock('../Lane/Lane', () => ({
-  Lane: ({ name }: { name: string }) => (
-    <div data-testid={`lane-${name}`}>{name}</div>
+  Lane: ({ name, laneId }: { name: string; laneId: string }) => (
+    <div data-testid={`lane-${name}`} data-lane-id={laneId}>
+      {name}
+    </div>
   ),
 }));
 
@@ -27,6 +38,10 @@ vi.mock('../BoardError/BoardError', () => ({
   BoardError: ({ message }: { message: string }) => (
     <div data-testid="board-error">{message}</div>
   ),
+}));
+
+vi.mock('../DragOverlayCard/DragOverlayCard', () => ({
+  DragOverlayCard: () => <div data-testid="drag-overlay-card" />,
 }));
 
 const mockBoardData: BoardData = {
@@ -56,6 +71,7 @@ describe('Board', () => {
       data: null,
       error: null,
       fetchBoard: mockFetchBoard,
+      moveIssue: mockMoveIssue,
     };
   });
 
@@ -90,5 +106,39 @@ describe('Board', () => {
   it('triggers fetchBoard on mount', () => {
     render(<Board />);
     expect(mockFetchBoard).toHaveBeenCalledTimes(1);
+  });
+
+  it('passes laneId="unassigned" to unassigned lane', () => {
+    mockStoreState = {
+      ...mockStoreState,
+      status: 'loaded',
+      data: mockBoardData,
+    };
+    render(<Board />);
+    const unassignedLane = screen.getByTestId('lane-未割り当て');
+    expect(unassignedLane).toHaveAttribute('data-lane-id', 'unassigned');
+  });
+
+  it('passes laneId with milestone id to milestone lanes', () => {
+    mockStoreState = {
+      ...mockStoreState,
+      status: 'loaded',
+      data: mockBoardData,
+    };
+    render(<Board />);
+    const msLane = screen.getByTestId('lane-Sprint 2504');
+    expect(msLane).toHaveAttribute('data-lane-id', 'milestone-1');
+  });
+
+  it('renders board with aria-label when loaded', () => {
+    mockStoreState = {
+      ...mockStoreState,
+      status: 'loaded',
+      data: mockBoardData,
+    };
+    render(<Board />);
+    expect(
+      screen.getByRole('region', { name: 'カンバンボード' }),
+    ).toBeInTheDocument();
   });
 });
