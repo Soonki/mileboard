@@ -7,7 +7,7 @@ import {
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import type { DragStartEvent, DragEndEvent } from '@dnd-kit/core';
+import type { DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core';
 import { Toaster } from 'sonner';
 import { useBoardStore, findIssueInBoardData } from '../../stores/boardStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -52,6 +52,7 @@ function resolveOverLaneId(
 
 export function Board() {
   const [activeIssue, setActiveIssue] = useState<BacklogIssue | null>(null);
+  const [overLaneId, setOverLaneId] = useState<string | null>(null);
   const status = useBoardStore((s) => s.status);
   const data = useBoardStore((s) => s.data);
   const error = useBoardStore((s) => s.error);
@@ -72,8 +73,17 @@ export function Board() {
     setActiveIssue(found);
   };
 
+  const handleDragOver = (event: DragOverEvent) => {
+    if (!data || !event.over) {
+      setOverLaneId(null);
+      return;
+    }
+    setOverLaneId(resolveOverLaneId(data, event.over.id));
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveIssue(null);
+    setOverLaneId(null);
     if (!data || !event.over) return;
 
     const fromLaneId = findLaneContaining(data, event.active.id as number);
@@ -107,6 +117,7 @@ export function Board() {
         sensors={sensors}
         collisionDetection={closestCorners}
         onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
         <div
@@ -121,6 +132,7 @@ export function Board() {
             releaseDueDate={null}
             issues={data.unassignedIssues}
             milestonePrefix={milestonePrefix}
+            isDropTarget={overLaneId === 'unassigned'}
           />
           {data.milestones.map(({ milestone, issues }) => (
             <Lane
@@ -131,6 +143,7 @@ export function Board() {
               releaseDueDate={milestone.releaseDueDate}
               issues={issues}
               milestonePrefix={milestonePrefix}
+              isDropTarget={overLaneId === `milestone-${milestone.id}`}
             />
           ))}
         </div>

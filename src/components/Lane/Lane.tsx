@@ -17,6 +17,7 @@ interface LaneProps {
   releaseDueDate: string | null;
   issues: BacklogIssue[];
   milestonePrefix: string;
+  isDropTarget?: boolean;
 }
 
 export function Lane({
@@ -26,8 +27,9 @@ export function Lane({
   releaseDueDate,
   issues,
   milestonePrefix,
+  isDropTarget = false,
 }: LaneProps) {
-  const { setNodeRef, isOver } = useDroppable({ id: laneId });
+  const { setNodeRef } = useDroppable({ id: laneId });
   const issueCount = issues.length;
   const memberBreakdown = computeMemberBreakdown(issues);
   const issueIds = issues.map((i) => i.id);
@@ -35,7 +37,7 @@ export function Lane({
   return (
     <div
       ref={setNodeRef}
-      className={`${styles.lane} ${isOver ? styles.laneDropTarget : ''}`}
+      className={`${styles.lane} ${isDropTarget ? styles.laneDropTarget : ''}`}
       role="region"
       aria-label={name}
     >
