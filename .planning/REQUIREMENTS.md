@@ -54,27 +54,27 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FILT-01 | — | Pending |
-| FILT-02 | — | Pending |
-| FILT-03 | — | Pending |
-| FILT-04 | — | Pending |
-| FILT-05 | — | Pending |
-| SORT-01 | — | Pending |
-| SORT-02 | — | Pending |
-| SORT-03 | — | Pending |
-| SORT-04 | — | Pending |
-| REORD-01 | — | Pending |
-| REORD-02 | — | Pending |
-| REORD-03 | — | Pending |
-| BULK-01 | — | Pending |
-| BULK-02 | — | Pending |
-| BULK-03 | — | Pending |
+| FILT-01 | Phase 6 | Pending |
+| FILT-02 | Phase 6 | Pending |
+| FILT-03 | Phase 6 | Pending |
+| FILT-04 | Phase 6 | Pending |
+| FILT-05 | Phase 6 | Pending |
+| SORT-01 | Phase 7 | Pending |
+| SORT-02 | Phase 7 | Pending |
+| SORT-03 | Phase 7 | Pending |
+| SORT-04 | Phase 7 | Pending |
+| REORD-01 | Phase 8 | Pending |
+| REORD-02 | Phase 8 | Pending |
+| REORD-03 | Phase 8 | Pending |
+| BULK-01 | Phase 9 | Pending |
+| BULK-02 | Phase 9 | Pending |
+| BULK-03 | Phase 9 | Pending |
 
 **Coverage:**
 - v1.1 requirements: 15 total
-- Mapped to phases: 0
-- Unmapped: 15 (roadmap pending)
+- Mapped to phases: 15
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-04-08*
-*Last updated: 2026-04-08 after initial definition*
+*Last updated: 2026-04-08 after roadmap creation*

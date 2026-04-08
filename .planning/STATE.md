@@ -2,12 +2,12 @@
 gsd_state_version: 1.0
 milestone: v1.1
 milestone_name: フィルタリング・ソート・一括操作
-status: defining
-stopped_at: Defining requirements
-last_updated: "2026-04-08T17:30:00.000Z"
-last_activity: 2026-04-08 -- Milestone v1.1 started
+status: ready_to_plan
+stopped_at: Roadmap created, ready to plan Phase 6
+last_updated: "2026-04-08T18:00:00.000Z"
+last_activity: 2026-04-08 -- v1.1 roadmap created
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,14 +21,35 @@ progress:
 See: .planning/PROJECT.md (updated 2026-04-08)
 
 **Core value:** マイルストーン間の課題移動をドラッグ&ドロップで直感的に行え、チームの計画調整を高速化すること
-**Current focus:** Milestone v1.1 — フィルタリング・ソート・一括操作
+**Current focus:** Phase 6 フィルタリング
 
 ## Current Position
 
-Phase: Not started (defining requirements)
-Plan: —
-Status: Defining requirements
-Last activity: 2026-04-08 — Milestone v1.1 started
+Phase: 6 of 9 (フィルタリング)
+Plan: 0 of ? in current phase
+Status: Ready to plan
+Last activity: 2026-04-08 — v1.1 roadmap created
+
+Progress: [░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░] 0% (v1.1)
+
+## Performance Metrics
+
+**Velocity:**
+- Total plans completed: 14 (v1.0)
+- Average duration: carried from v1.0
+- Total execution time: carried from v1.0
+
+**By Phase:**
+
+| Phase | Plans | Total | Avg/Plan |
+|-------|-------|-------|----------|
+| 1-5 (v1.0) | 14 | — | — |
+| 6. フィルタリング | — | — | — |
+| 7. ソート | — | — | — |
+| 8. レーン内並べ替え | — | — | — |
+| 9. 複数選択・一括移動 | — | — | — |
+
+*Updated after each plan completion*
 
 ## Accumulated Context
 
@@ -37,10 +58,10 @@ Last activity: 2026-04-08 — Milestone v1.1 started
 Decisions are logged in PROJECT.md Key Decisions table.
 Recent decisions affecting current work:
 
-- [Roadmap]: 5-phase structure derived from requirement categories (CONN, BOARD, DND, UX) with infrastructure Phase 2 for Rust API client
-- [Phase 04]: WCAG luminance threshold 0.179: #ed8077 and #4caf93 get black text (luminance > 0.179)
-- [Phase 04]: openUrl failures silently caught -- ripple animation serves as click confirmation
-- [Phase 04]: Local useState for LaneHeader toggle -- no Zustand needed for ~7 lanes
+- [v1.0]: Board側onDragOverでドロップターゲット管理 — useDroppableのisOver制限を回避
+- [v1.1 research]: boardStore.dataは常にraw unfiltered — フィルタはビュー層のみ（canonical/derived分離）
+- [v1.1 research]: ソートモード中は手動並べ替え無効 — 競合回避
+- [v1.1 research]: 一括移動はper-item tracking — single-snapshot rollbackは不可
 
 ### Pending Todos
 
@@ -48,11 +69,11 @@ Recent decisions affecting current work:
 
 ### Blockers/Concerns
 
-- API key secure storage: tauri-plugin-keyring compatibility with Tauri 2 is unconfirmed. Fallback is encrypted plugin-store.
-- Backlog free-plan rate limits: Exact thresholds not published. Must query at runtime.
+- Phase 8: hasLeftSourceLaneガード動作はclosestCornersとの組み合わせで実験が必要（research flag）
+- Phase 9: Rustバックエンドが X-RateLimit-Remaining をフロントエンドに返しているか確認が必要
 
 ## Session Continuity
 
-Last session: 2026-04-08T17:30:00.000Z
-Stopped at: Defining requirements for v1.1
+Last session: 2026-04-08
+Stopped at: v1.1 roadmap created, ready to plan Phase 6
 Resume file: None
