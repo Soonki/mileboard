@@ -15,6 +15,7 @@ export interface BoardData {
 export interface FetchBoardParams {
   host: string;
   apiKey: string;
+  projectId: number;
   projectKey: string;
   milestonePrefix: string;
   categoryIds: number[] | null;

@@ -53,16 +53,17 @@ describe('tauriBridge', () => {
 
     it('calls invoke with fetch_board_data command', async () => {
       mockInvoke.mockResolvedValue(mockBoardData);
-      await fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint');
+      await fetchBoardData('example.backlog.com', 'key123', 100, 'PROJ', 'Sprint');
       expect(mockInvoke).toHaveBeenCalledWith('fetch_board_data', expect.any(Object));
     });
 
     it('passes all parameters correctly with categoryIds null', async () => {
       mockInvoke.mockResolvedValue(mockBoardData);
-      await fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint');
+      await fetchBoardData('example.backlog.com', 'key123', 100, 'PROJ', 'Sprint');
       expect(mockInvoke).toHaveBeenCalledWith('fetch_board_data', {
         host: 'example.backlog.com',
         apiKey: 'key123',
+        projectId: 100,
         projectKey: 'PROJ',
         milestonePrefix: 'Sprint',
         categoryIds: null,
@@ -71,7 +72,7 @@ describe('tauriBridge', () => {
 
     it('converts undefined categoryIds to null', async () => {
       mockInvoke.mockResolvedValue(mockBoardData);
-      await fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint', undefined);
+      await fetchBoardData('example.backlog.com', 'key123', 100, 'PROJ', 'Sprint', undefined);
       expect(mockInvoke).toHaveBeenCalledWith('fetch_board_data', expect.objectContaining({
         categoryIds: null,
       }));
@@ -79,10 +80,11 @@ describe('tauriBridge', () => {
 
     it('passes categoryIds array when provided', async () => {
       mockInvoke.mockResolvedValue(mockBoardData);
-      await fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint', [1, 2, 3]);
+      await fetchBoardData('example.backlog.com', 'key123', 100, 'PROJ', 'Sprint', [1, 2, 3]);
       expect(mockInvoke).toHaveBeenCalledWith('fetch_board_data', {
         host: 'example.backlog.com',
         apiKey: 'key123',
+        projectId: 100,
         projectKey: 'PROJ',
         milestonePrefix: 'Sprint',
         categoryIds: [1, 2, 3],
@@ -91,7 +93,7 @@ describe('tauriBridge', () => {
 
     it('returns BoardData on success', async () => {
       mockInvoke.mockResolvedValue(mockBoardData);
-      const result = await fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint');
+      const result = await fetchBoardData('example.backlog.com', 'key123', 100, 'PROJ', 'Sprint');
       expect(result).toEqual(mockBoardData);
       // Verify structure shape (realistic fixture test)
       expect(result.milestones).toHaveLength(1);
@@ -147,7 +149,7 @@ describe('tauriBridge', () => {
         unassignedIssues: [],
       };
       mockInvoke.mockResolvedValue(minimalBoardData);
-      const result = await fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint');
+      const result = await fetchBoardData('example.backlog.com', 'key123', 100, 'PROJ', 'Sprint');
       expect(result.milestones[0].issues[0].priority).toBeNull();
       expect(result.milestones[0].issues[0].assignee).toBeNull();
       expect(result.milestones[0].milestone.startDate).toBeNull();

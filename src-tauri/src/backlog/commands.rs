@@ -16,6 +16,7 @@ pub async fn fetch_board_data(
     client: State<'_, BacklogClient>,
     host: String,
     api_key: String,
+    project_id: u64,
     project_key: String,
     milestone_prefix: String,
     category_ids: Option<Vec<u64>>,
@@ -24,6 +25,7 @@ pub async fn fetch_board_data(
         .fetch_board(
             &host,
             &api_key,
+            project_id,
             &project_key,
             &milestone_prefix,
             category_ids.as_deref(),

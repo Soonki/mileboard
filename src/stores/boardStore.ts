@@ -34,6 +34,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
       const data = await fetchBoardData(
         settings.hostUrl,
         settings.apiKey,
+        settings.projectId!,
         settings.projectKey,
         settings.milestonePrefix,
       );

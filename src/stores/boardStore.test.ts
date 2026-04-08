@@ -63,9 +63,9 @@ const mockBoardData: BoardData = {
 const mockSettings = {
   hostUrl: 'test.backlog.com',
   apiKey: 'test-key',
+  projectId: 42,
   projectKey: 'TEST',
   milestonePrefix: 'Sprint',
-  projectId: null,
 };
 
 describe('boardStore', () => {
@@ -189,6 +189,7 @@ describe('boardStore', () => {
     expect(mockFetchBoardData).toHaveBeenCalledWith(
       'test.backlog.com',
       'test-key',
+      42,
       'TEST',
       'Sprint',
     );

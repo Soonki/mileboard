@@ -32,6 +32,7 @@ impl BacklogClient {
         &self,
         host: &str,
         api_key: &str,
+        project_id: u64,
         project_key: &str,
         prefix: &str,
         category_ids: Option<&[u64]>,
@@ -48,7 +49,7 @@ impl BacklogClient {
         let mut milestone_data = Vec::with_capacity(milestones.len());
         for m in &milestones {
             let issues = self
-                .fetch_all_issues(host, api_key, project_key, Some(m.id), None, None)
+                .fetch_all_issues(host, api_key, project_id, Some(m.id), None, None)
                 .await?;
             milestone_data.push(MilestoneWithIssues {
                 milestone: m.clone(),
@@ -57,7 +58,7 @@ impl BacklogClient {
         }
 
         let unassigned_issues = self
-            .fetch_unassigned_issues(host, api_key, project_key, &statuses, category_ids)
+            .fetch_unassigned_issues(host, api_key, project_id, &statuses, category_ids)
             .await?;
 
         Ok(BoardData {
@@ -114,7 +115,7 @@ impl BacklogClient {
         &self,
         host: &str,
         api_key: &str,
-        project_key: &str,
+        project_id: u64,
         milestone_id: Option<u64>,
         status_ids: Option<&[u64]>,
         category_ids: Option<&[u64]>,
@@ -123,7 +124,7 @@ impl BacklogClient {
             .fetch_issue_count(
                 host,
                 api_key,
-                project_key,
+                project_id,
                 milestone_id,
                 status_ids,
                 category_ids,
@@ -142,7 +143,7 @@ impl BacklogClient {
                 .fetch_issues_page(
                     host,
                     api_key,
-                    project_key,
+                    project_id,
                     milestone_id,
                     status_ids,
                     category_ids,
@@ -162,7 +163,7 @@ impl BacklogClient {
         &self,
         host: &str,
         api_key: &str,
-        project_key: &str,
+        project_id: u64,
         project_statuses: &[Status],
         category_ids: Option<&[u64]>,
     ) -> Result<Vec<Issue>, BacklogError> {
@@ -176,7 +177,7 @@ impl BacklogClient {
             .fetch_all_issues(
                 host,
                 api_key,
-                project_key,
+                project_id,
                 None,
                 Some(&non_closed_ids),
                 category_ids,
@@ -220,7 +221,7 @@ impl BacklogClient {
         &self,
         host: &str,
         api_key: &str,
-        project_key: &str,
+        project_id: u64,
         milestone_id: Option<u64>,
         status_ids: Option<&[u64]>,
         category_ids: Option<&[u64]>,
@@ -229,7 +230,7 @@ impl BacklogClient {
             host,
             "/issues/count",
             api_key,
-            project_key,
+            project_id,
             milestone_id,
             status_ids,
             category_ids,
@@ -257,7 +258,7 @@ impl BacklogClient {
         &self,
         host: &str,
         api_key: &str,
-        project_key: &str,
+        project_id: u64,
         milestone_id: Option<u64>,
         status_ids: Option<&[u64]>,
         category_ids: Option<&[u64]>,
@@ -268,7 +269,7 @@ impl BacklogClient {
             host,
             "/issues",
             api_key,
-            project_key,
+            project_id,
             milestone_id,
             status_ids,
             category_ids,
@@ -365,14 +366,14 @@ fn build_issue_url(
     host: &str,
     path: &str,
     api_key: &str,
-    project_key: &str,
+    project_id: u64,
     milestone_id: Option<u64>,
     status_ids: Option<&[u64]>,
     category_ids: Option<&[u64]>,
     offset: Option<u64>,
     count: Option<u64>,
 ) -> String {
-    let mut url = format!("https://{host}/api/v2{path}?apiKey={api_key}&projectId[]={project_key}");
+    let mut url = format!("https://{host}/api/v2{path}?apiKey={api_key}&projectId[]={project_id}");
     if let Some(mid) = milestone_id {
         url.push_str(&format!("&milestoneId[]={mid}"));
     }
@@ -700,14 +701,14 @@ mod tests {
             "host",
             "/issues",
             "key",
-            "PROJ",
+            123,
             Some(42),
             Some(&[1, 2, 3]),
             Some(&[10, 20]),
             Some(100),
             Some(50),
         );
-        assert!(url.contains("projectId[]=PROJ"));
+        assert!(url.contains("projectId[]=123"));
         assert!(url.contains("milestoneId[]=42"));
         assert!(url.contains("statusId[]=1"));
         assert!(url.contains("statusId[]=2"));
@@ -724,14 +725,14 @@ mod tests {
             "host",
             "/issues/count",
             "key",
-            "PROJ",
+            123,
             None,
             None,
             None,
             None,
             None,
         );
-        assert!(url.contains("projectId[]=PROJ"));
+        assert!(url.contains("projectId[]=123"));
         assert!(!url.contains("milestoneId"));
         assert!(!url.contains("statusId"));
         assert!(!url.contains("categoryId"));

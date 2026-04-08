@@ -16,6 +16,7 @@ import type { BoardData, FetchBoardParams } from '../types/board';
 export async function fetchBoardData(
   host: string,
   apiKey: string,
+  projectId: number,
   projectKey: string,
   milestonePrefix: string,
   categoryIds?: number[],
@@ -23,6 +24,7 @@ export async function fetchBoardData(
   const params: FetchBoardParams = {
     host,
     apiKey,
+    projectId,
     projectKey,
     milestonePrefix,
     categoryIds: categoryIds ?? null,
