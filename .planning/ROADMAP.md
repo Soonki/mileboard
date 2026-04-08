@@ -32,7 +32,11 @@ Phases continue numbering from previous milestone (never restart at 01).
   2. 選択中のフィルタ条件がフィルタバーにチップとして表示され、個別削除または一括クリアできる
   3. フィルタにより全カードが非表示になったレーンに「N件が非表示」のような件数表示がある
   4. フィルタ適用中もレーン間DnDが正常に動作する（フィルタされたビューがDnDのID解決を壊さない）
-**Plans**: TBD
+**Plans**: 3 plans
+Plans:
+- [ ] 06-01-PLAN.md — FilterState型 + applyFilters/extractOptions純粋関数 + filterStore + CSSトークン
+- [ ] 06-02-PLAN.md — FilterDropdown/FilterChip/FilterBar UIコンポーネント
+- [ ] 06-03-PLAN.md — Board統合 (FilterBar配置 + useMemoフィルタ + Lane hiddenCount + 動作確認)
 **UI hint**: yes
 
 ### Phase 7: ソート
@@ -77,7 +81,7 @@ Phases execute in numeric order: 6 → 7 → 8 → 9
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 6. フィルタリング | 0/? | Not started | - |
+| 6. フィルタリング | 0/3 | Not started | - |
 | 7. ソート | 0/? | Not started | - |
 | 8. レーン内並べ替え | 0/? | Not started | - |
 | 9. 複数選択・一括移動 | 0/? | Not started | - |
