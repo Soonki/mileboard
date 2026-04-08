@@ -1,169 +1,241 @@
 # Project Research Summary
 
-**Project:** mileboard v1.1 (Filtering, Sorting, Intra-lane Reorder, Multi-select Bulk Move)
-**Domain:** Kanban board enhancement -- client-side filtering/sorting + DnD extensions
-**Researched:** 2026-04-08
+**Project:** mileboard (Backlog Milestone Kanban Viewer)
+**Domain:** Desktop kanban board with external API integration (Tauri + React)
+**Researched:** 2026-04-07
 **Confidence:** HIGH
 
 ## Executive Summary
 
-mileboard v1.1 adds four productivity features to an already-shipped Tauri kanban app: multi-facet filtering (status/assignee/category), card sorting (assignee/due date), intra-lane drag-and-drop reordering with local persistence, and multi-select bulk lane move. The entire v1.1 feature set can be implemented without adding any new npm dependencies -- the existing stack already provides every primitive needed. Treat filtering and sorting as pure view-layer derived computations on immutable canonical board data, implement intra-lane reorder using the already-wired arrayMove from @dnd-kit/sortable, and implement multi-select as external selection state with a batched action bar rather than multi-drag (which @dnd-kit does not support natively).
+Mileboard is a focused desktop application that fills a specific gap in the Backlog project management ecosystem: the ability to view milestones as kanban lanes and drag issues between them. This is a well-scoped tool with a clear value proposition -- Backlog's native board only shows status columns, not milestone-to-milestone planning views. The recommended approach is a Tauri 2 desktop app with a Rust backend that proxies all Backlog API calls (eliminating CORS and centralizing rate limiting) and a React 18 + Zustand 5 frontend for the kanban UI with dnd-kit handling drag-and-drop interactions.
 
-The four features have a clear sequential dependency: filtering establishes the filterStore infrastructure and the critical canonical-vs-derived data split; sorting builds on the filter bar UI and must define the sort/reorder conflict before intra-lane reorder; reorder modifies the Board.tsx onDragEnd handler that multi-select also needs; and multi-select+bulk move is safest last when filtering, sorting, and DnD are all stable.
+The architecture is straightforward: Rust owns all HTTP communication, credential storage, and rate-limit enforcement; React owns the UI, optimistic state, and DnD interactions. The two layers communicate through Tauri's IPC command system with typed TypeScript wrappers. This is a proven Tauri pattern with high-quality official documentation. The stack choices are conservative and well-matched -- no bleeding-edge dependencies, no unnecessary complexity.
 
-The primary risk is the three-way interaction between filtering, sorting, and manual reorder: filtered views must never affect the canonical data (or DnD ID resolution breaks), SortableContext items must always match rendered card nodes exactly (or collision detection silently breaks), and manual reorder must be disabled when sort is active. The secondary risk is bulk move rollback: the existing single-card snapshot rollback is wrong for multi-card operations and must be replaced with per-item success tracking.
+The primary risks center on two areas: **data integrity during milestone updates** and **dnd-kit integration stability**. The Backlog API replaces the entire `milestoneId[]` array on PATCH, meaning a careless update silently destroys milestone assignments outside the app's visible scope. This is the single most dangerous pitfall. On the DnD side, cross-container drag with dnd-kit has well-documented re-render loop issues and optimistic update flicker that require specific implementation patterns to avoid. Both risks have known solutions documented in the research, but they must be implemented correctly from the start -- not retrofitted.
 
 ## Key Findings
 
 ### Recommended Stack
 
-Zero new dependencies required for v1.1. @dnd-kit/sortable arrayMove (verified at v10.0.0) handles intra-lane reorder. @tauri-apps/plugin-store (already used for settings) supports per-project lane order persistence. Zustand 5 natively supports multiple independent stores. All structural additions use the existing CSS Modules styling approach.
+The stack is a standard Tauri 2 desktop app with React rendering in a system webview. All choices are stable, well-documented, and have existing community usage patterns for kanban-style applications.
 
 **Core technologies:**
-- @dnd-kit/sortable v10.0.0: arrayMove + SortableContext for intra-lane reorder -- already wired in Lane.tsx
-- Zustand 5: new filterStore (filter/sort state), selection as local useState in Board
-- @tauri-apps/plugin-store v2.4.x: lane order persistence keyed per-project -- already used for settings
-- CSS Modules + React: custom FilterDropdown (~100 LOC) -- no external UI library needed
-- TypeScript Array.sort with comparators: sort by assignee/dueDate -- no lodash needed
+- **Tauri 2.10.x**: Desktop shell + Rust backend -- eliminates CORS by proxying API calls through Rust, isolates API credentials from the webview
+- **React 18.3.x**: UI rendering -- stable, battle-tested, server components (React 19) are irrelevant for desktop
+- **Zustand 5.0.x**: Client state -- lightweight, selector-based re-rendering, ideal for frequent DnD updates
+- **@dnd-kit/core 6.3.x + @dnd-kit/sortable 10.0.x**: Drag-and-drop -- proven kanban patterns, accessible by default, stable API (avoid 0.x @dnd-kit/react rewrite)
+- **Vite 8.0.x**: Build tool -- Rolldown-based (10-30x faster builds), native TS path aliases and CSS Modules
+- **CSS Modules**: Scoped styling -- zero runtime cost, built into Vite, team familiarity
+- **Tauri plugins**: plugin-http (unused from JS, API calls go through Rust reqwest), plugin-store (settings persistence), plugin-opener (open Backlog issues in browser)
+- **Vitest 4.1.x + Testing Library**: Testing -- Vite-native, shares config
+
+**Critical version note:** Use @dnd-kit/core 6.3.1 (stable), not @dnd-kit/react 0.3.x (pre-stable). Migration to the new API when it reaches 1.0.
 
 ### Expected Features
 
-**Must have (table stakes for v1.1):**
-- Status filter (multi-select OR) -- every planning session needs open/resolved focus
-- Assignee filter (multi-select OR) -- daily scrum focus on one person workload
-- Category filter (multi-select OR) -- feature-area planning sessions
-- Sort by assignee (alphabetical) -- clusters one person work visually within lanes
-- Sort by due date (chronological) -- surfaces time-critical issues at top
-- Filter bar UI with active chips and clear-all -- standard pattern users expect
+The feature landscape cleanly separates into 13 table-stakes features (the complete planning loop) and 12 differentiators (usability polish and power features). Anti-features are well-defined to prevent scope creep.
 
-**Should have (competitive differentiators):**
-- Intra-lane DnD reorder with local persistence -- no other Backlog tool offers this
-- Multi-select cards (Ctrl+click / Shift+click) -- essential for large sprint replanning
-- Bulk lane move via action bar -- transforms 10-drag operation into 1 action
-- Lane header filtered count (5/12) -- immediate filter impact feedback
-- Sort indicator in lane header -- confirms active sort state
+**Must have (table stakes -- all required for MVP):**
+- T1: Connection settings (API key, host, project key, milestone prefix)
+- T2: Milestone lanes in chronological order (prefix-filtered, ~7 lanes)
+- T3: Issue cards with key info (key, title, status, assignee, priority)
+- T4: Status color coding
+- T5: "Unassigned" lane (no milestone) as the primary triage source
+- T6: Drag-and-drop between lanes (core interaction)
+- T7: Optimistic UI update + rollback on failure
+- T8: Loading states (skeleton loaders)
+- T9: Error toasts (rate limit, network, auth failures)
+- T10: Card click opens Backlog issue in default browser
+- T11: Lane header with issue count
+- T12: Lane header with member breakdown (workload visibility)
+- T13: Multi-milestone issue handling (display in earliest lane, warning badge, disable cross-lane DnD)
 
-**Defer (v1.2+):**
-- Free-text search -- debounce, highlight, scope creep for v1.1
-- Saved named filter presets -- auto-persist last state is sufficient
-- Server-side filtering -- client-side is instant; API re-fetch adds latency and rate consumption
-- Cross-lane multi-select DnD maintaining relative order -- action bar covers the use case
-- Custom sort fields beyond assignee + due date
+**Should have (Phase 2 -- usability polish):**
+- D1-D3: Assignee, status, and priority filters
+- D5: Auto-refresh / polling (board stays current during meetings)
+- D6: Card sorting within lanes
+- D9: Lane collapse/expand
+- D10: Milestone date display on lane headers
+- D11: DnD visual indicators (drop zones, insertion points)
+
+**Defer (Phase 3+):**
+- D4: Keyboard shortcuts for DnD
+- D7: Search / keyword filter
+- D8: Bulk milestone move (multi-select)
+- D12: Connection profile switching
+
+**Explicitly never build:** Issue CRUD, status column view, WIP limits, Gantt charts, notifications/webhooks, mobile support, offline mode, comments, custom fields, multi-project unified view, analytics.
 
 ### Architecture Approach
 
-boardStore.data (raw API response, never filtered) feeds through filterIssues() then sortIssues() pure functions at render time, producing visibleIssues that drives both Lane rendering and SortableContext items. Selection state lives as useState local to Board. filterStore owns filter and sort preferences as view-layer state. laneOrderStorage persists custom card order to plugin-store with a merge strategy applied after every fetchBoard(). The Rust backend requires zero changes.
+Tauri's Core-Shell architecture: Rust backend handles all Backlog API communication, credential storage, and rate limiting; React frontend renders the kanban UI in a system webview. Communication is exclusively through Tauri IPC commands. The frontend never makes HTTP requests directly -- all API calls are proxied through typed Rust commands.
 
 **Major components:**
-1. filterStore (new) -- filter facets + sort field/direction as session-scoped Zustand state; separate from boardStore
-2. FilterBar + FilterDropdown + SortControls (new) -- filter/sort UI in BoardHeader; FilterDropdown generic/reusable
-3. SelectionToolbar (new) -- floating action bar showing selected count + Move to lane dropdown
-4. filterIssues + sortIssues + extractFilterOptions (new utils) -- pure functions forming the derived data pipeline
-5. laneOrderStorage (new service) -- plugin-store persistence for per-project lane order maps with merge strategy
-6. Board.tsx (modified) -- selectedIds state, multi-select DnD logic in onDragEnd, useMemo for filtered+sorted arrays
-7. boardStore.ts (modified) -- reorderInLane() (arrayMove + persist) and bulkMoveIssues() (sequential API calls, per-item tracking)
+
+1. **Rust: backlog_client** -- reqwest wrapper for Backlog API v2 with auth, base URL, and rate-limit-aware request execution
+2. **Rust: commands/** -- Tauri command modules (settings, milestones, issues, issue_update) that bridge IPC to the API client
+3. **Rust: rate_limiter** -- Tracks X-RateLimit headers, queues/delays requests approaching limits
+4. **React: boardStore (Zustand)** -- Lane-structured state (`{ lanes: { [milestoneId]: Issue[] } }`), optimistic update with per-issue rollback
+5. **React: tauriBridge** -- Typed `invoke()` wrappers providing TypeScript safety at the IPC boundary
+6. **React: KanbanBoard + MilestoneLane + IssueCard** -- DndContext orchestration, droppable lanes, draggable cards
+
+**Key architectural decisions:**
+- HTTP calls go through Rust reqwest, NOT through Tauri's HTTP plugin from JavaScript
+- Tauri capabilities only need `core:default` and `store:default` (no HTTP plugin permission needed)
+- Rate limiting is centralized in Rust, not scattered across frontend calls
+- Store state is structured by lane (not flat array) to enable granular re-renders
 
 ### Critical Pitfalls
 
-1. **Filtered view corrupts DnD ID resolution** -- boardStore.data must always be raw unfiltered. DnD handlers resolve lane IDs from raw data only. Architectural foundation for all features.
+1. **milestoneId[] full-array replacement (CRITICAL)** -- Backlog PATCH replaces the entire milestone array. Must read current milestones before writing, preserve non-prefix milestones, and send the complete merged array. Unit test the merge utility exhaustively. Never cache milestone arrays for writes.
 
-2. **SortableContext items array diverges from rendered cards** -- items prop and rendered cards must derive from the same getVisibleIssues() call. Divergence causes silent @dnd-kit collision detection failure.
+2. **onDragOver infinite re-render loops (CRITICAL)** -- Cross-container drag in dnd-kit causes state oscillation near lane boundaries. Prevent with debounced onDragOver, custom collision detection filtering self-container collisions, and guards against no-op state updates. Consider deferring visual container transfer to onDragEnd only.
 
-3. **Bulk move cascading rollback disaster** -- Single-snapshot rollback is wrong for multi-card ops. Use per-item tracking: on failure of card N, keep 1..N-1 moved, revert N onwards, then fetchBoard() to resync.
+3. **Optimistic update flicker on drop (CRITICAL)** -- Card snaps back briefly because dnd-kit's internal state and Zustand disagree during the drop-to-update window. Fix with synchronous Zustand state update in onDragEnd before the API call, or use a temporary local state buffer.
 
-4. **Intra-lane reorder triggers false positives during cross-lane drag** -- Apply arrayMove only in onDragEnd, not onDragOver. Or implement hasLeftSourceLane guard.
+4. **Rate limit exhaustion during initial load (CRITICAL)** -- 7+ sequential API calls on startup can hit Backlog rate limits, especially on free plans. Implement sequential fetching with rate-limit header monitoring, query `/api/v2/rateLimit` at startup, show per-lane progressive loading.
 
-5. **Local sort order destroyed on every fetchBoard()** -- Store order separately, re-merge after every fetch: keep persisted positions, append new issues at end, prune removed issues.
+5. **Concurrent optimistic rollback destroys other edits (MODERATE)** -- Full-store snapshot rollback overwrites other in-flight mutations. Use per-issue rollback patches instead of full-store snapshots.
 
 ## Implications for Roadmap
 
-Based on research, suggested phase structure:
+Based on dependency analysis, architecture boundaries, and pitfall severity, the project should be built in 5 phases.
 
-### Phase 1: Filtering + Filter Bar UI
+### Phase 1: Foundation and Settings
+**Rationale:** Everything depends on connection settings. No API calls, no data, no board without a valid Backlog connection. This phase establishes the Tauri project scaffold and the settings persistence layer.
+**Delivers:** Working Tauri app with settings form that validates API connectivity.
+**Addresses:** T1 (Connection settings)
+**Avoids:** Pitfall 9 (API key plain text) -- decide on credential storage strategy here
 
-**Rationale:** Highest value-to-effort ratio. No DnD changes needed. Establishes architectural foundation that Phases 2-4 all depend on.
-**Delivers:** Status/assignee/category multi-select filters, filter bar UI with active chips, lane header filtered counts, clear-all action.
-**Addresses:** F1 (status filter), F2 (assignee filter), F3 (category filter), F6 (filter bar UI), D4 (filter chips)
-**Avoids:** Pitfall 1 (filtered view corrupts DnD) by design. Pitfall 2 (SortableContext mismatch) -- getVisibleIssues() pipeline locked in here.
+**Scope:**
+- Tauri project scaffold (React + TS + Vite 8)
+- Rust models (Milestone, Issue, Settings structs with serde)
+- Store plugin setup for settings persistence
+- get_settings / save_settings Tauri commands
+- SettingsView form with validation (test API call on save)
+- settingsStore (Zustand)
+- TypeScript types
 
-### Phase 2: Sorting
+### Phase 2: API Integration Layer (Read-Only)
+**Rationale:** The Backlog API client with rate limiting must be rock-solid before building any UI that depends on it. This phase is read-only -- no mutations, no risk of data corruption. It validates the entire data pipeline.
+**Delivers:** Rust backend that fetches milestones and issues from Backlog with proper pagination and rate limiting. Typed TypeScript bridge.
+**Addresses:** Foundation for T2, T3, T5
+**Avoids:** Pitfall 4 (rate limit exhaustion), Pitfall 13 (pagination truncation), Pitfall 7 (IPC overhead -- batch calls in Rust)
 
-**Rationale:** Builds on filter bar UI from Phase 1. Pure TypeScript comparators -- no DnD changes. Defines sort/reorder mutual exclusion before Phase 3.
-**Delivers:** Sort by assignee and due date with direction toggle, sort indicator, sort preference persistence.
-**Addresses:** F4 (sort by assignee), F5 (sort by due date), D5 (sort indicator)
-**Avoids:** Sort-vs-reorder conflict defined here rather than retrofitted in Phase 3.
+**Scope:**
+- backlog_client.rs (reqwest wrapper with auth)
+- rate_limiter.rs (header parsing, wait-duration calculation)
+- Milestone commands (fetch, filter by prefix + date range)
+- Issue commands (fetch per milestone with pagination, fetch unassigned)
+- tauriBridge.ts (typed invoke wrappers)
+- Sequential fetching orchestration from Rust
 
-### Phase 3: Intra-Lane DnD Reorder
+### Phase 3: Kanban Display (Read-Only UI)
+**Rationale:** Build the complete visual board without any mutations. This is safe to demo, validate layout decisions, and stress-test with real Backlog data. Separating display from DnD isolates UI concerns from interaction complexity.
+**Delivers:** Full kanban board showing milestone lanes with issue cards, status colors, lane headers with counts and member breakdowns. No drag-and-drop yet.
+**Addresses:** T2 (Milestone lanes), T3 (Issue cards), T4 (Status colors), T5 (Unassigned lane), T8 (Loading states), T10 (Card click to browser), T11 (Lane header counts), T12 (Member breakdown)
+**Avoids:** Pitfall 11 (store structure) -- must structure Zustand state by lane from the start
 
-**Rationale:** Modifies Board.tsx onDragEnd -- the most sensitive code path. Isolated after Phases 1-2 are stable. Must complete before Phase 4.
-**Delivers:** Manual card ordering within a lane, persisted per-project. Order survives app restart and API refresh via merge strategy. Reorder disabled when sort active.
-**Addresses:** D1 (intra-lane DnD reorder, local persistence)
-**Avoids:** Pitfall 4 (false reorder during cross-lane drag). Pitfall 5 (order lost on refresh) -- merge strategy is definition of done.
+**Scope:**
+- boardStore (Zustand, lane-structured: `{ lanes: { [milestoneId]: Issue[] } }`)
+- KanbanBoard component (horizontal lane layout, loading states)
+- MilestoneLane / UnassignedLane components (droppable containers, headers)
+- IssueCard component (status badge, assignee, priority)
+- LaneHeader component (count + member breakdown)
+- StatusBadge with color mapping
+- Card click opens browser (plugin-opener)
+- Skeleton loaders for progressive loading
 
-### Phase 4: Multi-Select + Bulk Lane Move
+### Phase 4: Drag-and-Drop + Mutations
+**Rationale:** This is the riskiest phase -- it involves data mutations (PATCH with milestone array preservation), DnD interaction complexity, and optimistic state management. It builds on a proven read-only foundation. All four critical pitfalls converge here.
+**Delivers:** Complete drag-and-drop between milestone lanes with optimistic updates, rollback on failure, multi-milestone handling, and error toasts.
+**Addresses:** T6 (DnD), T7 (Optimistic UI + rollback), T9 (Error toasts), T13 (Multi-milestone handling)
+**Avoids:** Pitfall 1 (milestone array replacement), Pitfall 2 (re-render loops), Pitfall 3 (drop flicker), Pitfall 5 (multi-milestone ambiguity), Pitfall 6 (concurrent rollback), Pitfall 8 (empty lane dead zone), Pitfall 10 (collision detection), Pitfall 12 (stale closures)
 
-**Rationale:** Most complex feature. Depends on Phase 2 and Phase 3. Action bar recommended -- @dnd-kit has no native multi-drag support (Issue #120, open since 2021).
-**Delivers:** Ctrl+click/Shift+click selection, selection toolbar, Move to lane bulk action with sequential API calls and progress feedback, partial failure handling, board resync.
-**Addresses:** D2 (multi-select), D3 (bulk lane move)
-**Avoids:** Pitfall 3 (cascading rollback). Pitfall 6 (@dnd-kit no multi-drag). Pitfall 7 (click handler conflicts).
+**Scope:**
+- DnD event handlers (onDragStart, onDragOver, onDragEnd)
+- Custom collision detection (pointerWithin for lane, closestCenter within lane)
+- DragOverlay (ghost card during drag)
+- Debounced onDragOver with no-op guards
+- update_issue_milestone Rust command (read-before-write, preserve external milestones)
+- preserveExternalMilestones utility with exhaustive unit tests
+- Optimistic update with per-issue rollback (not full-store snapshot)
+- Synchronous Zustand state update in onDragEnd
+- Multi-milestone issue detection, warning badge, cross-lane DnD disable
+- Empty lane droppable (useDroppable on container)
+- Error toast integration (sonner)
+- getState() in DnD callbacks to avoid stale closures
+
+### Phase 5: Polish and Edge Cases
+**Rationale:** Final pass for production readiness. Addresses visual polish, edge cases, and remaining quality items.
+**Delivers:** Production-ready v1 with polished UX and robust error handling.
+**Addresses:** Remaining polish from T4, T8; edge cases (empty lanes, zero milestones, API errors)
+
+**Scope:**
+- Loading skeleton refinement
+- Status color coding CSS variables
+- Empty state handling (no milestones, no issues)
+- Error boundary for unexpected failures
+- Window title / app metadata
+- Build and packaging configuration
 
 ### Phase Ordering Rationale
 
-- Filtering first: No DnD risk, immediate user value, establishes canonical/derived split.
-- Sorting before reorder: Sort-vs-reorder exclusion must be designed before reorder is built.
-- Reorder before multi-select: Both modify the same onDragEnd handler.
-- Multi-select last: Highest complexity, most files, most API risk.
+- **Settings before API**: Cannot test anything without a valid Backlog connection
+- **API before UI**: Need real data to validate layout; mock data hides integration issues
+- **Read-only UI before DnD**: Isolates display bugs from interaction bugs; provides a stable demo checkpoint
+- **DnD last among core features**: Has the highest pitfall density (8 of 13 pitfalls are DnD-related); building on a proven read-only board reduces debugging surface
+- **Polish after DnD**: Only polish what works; avoid premature optimization of loading states and colors before the core interaction is stable
 
 ### Research Flags
 
 Phases likely needing deeper research during planning:
-- **Phase 3 (Intra-lane reorder):** hasLeftSourceLane guard behavior with closestCorners may need experimentation.
-- **Phase 4 (Bulk move):** Confirm Rust backend surfaces X-RateLimit-Remaining to frontend. Validate selection cap UX.
+- **Phase 2 (API Integration):** Backlog API pagination behavior needs validation (max items per page, X-Total-Count header presence). Rate limit thresholds on free vs. paid plans are not fully documented -- must query `/api/v2/rateLimit` at runtime.
+- **Phase 4 (DnD + Mutations):** dnd-kit multi-container patterns are complex and have multiple known issues. The exact implementation of custom collision detection and debounced onDragOver should be prototyped early with a spike. Multi-milestone conditional drag acceptance needs validation against dnd-kit's API.
 
 Phases with standard patterns (skip research-phase):
-- **Phase 1 (Filtering):** Faceted filter OR-within/AND-between is thoroughly documented.
-- **Phase 2 (Sorting):** Array.sort with comparators. Entirely standard.
+- **Phase 1 (Foundation):** Well-documented Tauri scaffold + React setup. Official templates exist.
+- **Phase 3 (Read-Only UI):** Standard React component composition. No novel patterns.
+- **Phase 5 (Polish):** CSS and error handling. Standard patterns.
 
 ## Confidence Assessment
 
 | Area | Confidence | Notes |
 |------|------------|-------|
-| Stack | HIGH | Zero new deps. Verified against installed type definitions and official docs. |
-| Features | HIGH | Derived from competitor analysis (Jira, Trello, Linear) and v1.0 user feedback. |
-| Architecture | HIGH | Direct codebase analysis + @dnd-kit and Zustand official docs. |
-| Pitfalls | HIGH | 7 pitfalls from @dnd-kit issue tracker (confirmed open bugs), Backlog API docs, codebase analysis. |
+| Stack | HIGH | All technologies are stable releases with official documentation. Tauri 2, React 18, Zustand 5, dnd-kit core 6 are all well-established. |
+| Features | HIGH | Feature list directly maps to PROJECT.md requirements. Backlog API constraints verified against official docs. Clear table-stakes vs. differentiator separation. |
+| Architecture | HIGH | Tauri Core-Shell is the canonical pattern. All architectural decisions (Rust-side HTTP, IPC commands, lane-structured Zustand store) are well-documented with official examples. |
+| Pitfalls | HIGH | Critical pitfalls (milestone array replacement, DnD re-render loops, rate limiting) are confirmed by official API docs and dnd-kit GitHub issues with multiple reporters and solutions. |
 
 **Overall confidence:** HIGH
 
 ### Gaps to Address
 
-- **Sort preference persistence scope:** FEATURES.md says persist sort; ARCHITECTURE.md says filterStore is session-scoped. Resolution: persist sort in plugin-store, keep filter selections session-only. Resolve in Phase 2 planning.
-- **Bulk move selection cap:** Warn-and-allow vs hard-block at ~20 cards. Resolve in Phase 4 planning.
-- **Empty lane after filter UX copy:** Exact Japanese string confirmation needed in Phase 1 planning.
-- **Cross-lane multi-select behavior:** Exact interaction spec when cards from multiple lanes are selected. Resolve in Phase 4 planning.
+- **API key secure storage:** `tauri-plugin-keyring` compatibility with Tauri 2 is unconfirmed. Fallback is encrypted storage via plugin-store, but the encryption approach needs design. Decision needed in Phase 1.
+- **Backlog free-plan rate limits:** Exact rate limit thresholds for free-plan users are not published. Must query `/api/v2/rateLimit` at runtime and adapt. Could impact initial load experience for free-plan users.
+- **dnd-kit onDragOver debounce vs. defer-to-onDragEnd trade-off:** Research identifies both approaches but does not definitively recommend one. A spike in early Phase 4 should test both with real data volumes.
+- **Vite 8 plugin compatibility:** Vite 8 (Rolldown) is a major architecture change. If any plugin breaks, Vite 7.3 is the documented fallback. Low risk for this project's minimal plugin set (only @vitejs/plugin-react-swc).
+- **@dnd-kit/react migration path:** Current recommendation is @dnd-kit/core 6.x (stable). When @dnd-kit/react reaches 1.0, migration should be evaluated. No action needed now, but the lane/card component API should not tightly couple to core 6.x internals.
 
 ## Sources
 
 ### Primary (HIGH confidence)
-- @dnd-kit/sortable docs (https://docs.dndkit.com/presets/sortable) -- arrayMove, SortableContext items requirement
-- @dnd-kit Issue #120 (https://github.com/clauderic/dnd-kit/issues/120) -- confirmed no native multi-select drag support
-- Tauri plugin-store v2 docs (https://v2.tauri.app/plugin/store/) -- key-value persistence API
-- Backlog API Rate Limit docs (https://developer.nulab.com/docs/backlog/rate-limit/) -- 150 update req/min per-user
-- Backlog API Update Issue (https://developer.nulab.com/docs/backlog/api/2/update-issue/) -- milestoneId[] full-array replacement
-- Jira Quick Filters docs -- filter UX reference
-- Direct codebase analysis: boardStore.ts, Board.tsx, Lane.tsx, IssueCard.tsx, client.rs, installed package type definitions
+- [Tauri 2.0 Architecture & Plugin Docs](https://v2.tauri.app/) -- core architecture, IPC, capabilities, plugins
+- [Backlog API v2 Official Documentation](https://developer.nulab.com/docs/backlog/) -- endpoints, rate limits, authentication, milestoneId[] behavior
+- [dnd-kit Official Documentation](https://docs.dndkit.com/) -- collision detection, sortable, multiple containers
+- [Zustand v5 Documentation](https://zustand.docs.pmnd.rs/) -- migration notes, selectors, useShallow
 
 ### Secondary (MEDIUM confidence)
-- @dnd-kit Discussion #1313 -- community multi-drag workarounds
-- hello-pangea/dnd multi-drag pattern -- multi-drag UX adapted for @dnd-kit
-- react-beautiful-dnd multi-drag -- Atlassian-documented selection UX pattern
-- Zustand selectors discussion -- derived state patterns
+- [dnd-kit GitHub Issues/Discussions](https://github.com/clauderic/dnd-kit/) -- re-render loops (#1421, #1678), optimistic update flicker (#1522)
+- [Vite 8.0 Announcement](https://vite.dev/blog/announcing-vite8) -- Rolldown architecture, compatibility
+- [TkDodo: Concurrent Optimistic Updates](https://tkdodo.eu/blog/concurrent-optimistic-updates-in-react-query) -- rollback patterns
+- [Tauri IPC Performance Discussions](https://github.com/tauri-apps/tauri/discussions/5690) -- serialization overhead benchmarks
 
-### Tertiary (MEDIUM confidence)
-- BricxLabs Filter UI Patterns 2025
-- LogRocket Faceted Filtering UX
-- Eleken SaaS Filter UI
+### Tertiary (needs validation)
+- [tauri-plugin-keyring](https://github.com/AliMD/tauri-plugin-keyring) -- Tauri 2 compatibility unconfirmed
+- [Backlog free-plan rate limits](https://developer.nulab.com/docs/backlog/rate-limit/) -- exact thresholds for free plan not published
+- [@dnd-kit/react 0.3.x](https://www.npmjs.com/package/@dnd-kit/react) -- pre-stable, migration timeline unknown
 
 ---
-*Research completed: 2026-04-08*
+*Research completed: 2026-04-07*
 *Ready for roadmap: yes*

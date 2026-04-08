@@ -1,244 +1,257 @@
-# Stack Research: v1.1 Additions
+# Technology Stack
 
-**Project:** mileboard v1.1 (Filtering, Sorting, Intra-lane Reorder, Multi-select Bulk Move)
-**Researched:** 2026-04-08
-**Confidence:** HIGH
-
-**Scope:** This document covers ONLY new stack needs for v1.1 features. The existing validated stack (Tauri 2.10.x, React 18/19, TypeScript, Vite, Zustand 5, @dnd-kit/core+sortable, CSS Modules, sonner, Vitest+RTL, plugin-store) is not re-evaluated.
+**Project:** mileboard (Backlog Milestone Kanban Viewer)
+**Researched:** 2026-04-07
+**Overall Confidence:** HIGH
 
 ---
 
-## Key Finding: Zero New Dependencies Needed
+## Recommended Stack
 
-After investigating all four v1.1 features, the existing stack already provides everything required. No new npm packages should be added.
+### Core Framework
 
----
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| Tauri | 2.10.x | Desktop shell, Rust backend, CORS-free HTTP | Eliminates CORS entirely by proxying API calls through Rust. Existing team experience with Tauri + React + Vite. v2.10.3 is current stable (March 2026). | HIGH |
+| React | 18.3.x | UI rendering | PROJECT.md specifies React 18. React 18.3 is the latest 18.x release with deprecation warnings that smooth future React 19 migration. No reason to jump to 19 now -- server components are irrelevant for a Tauri desktop app. | HIGH |
+| TypeScript | 5.7.x | Type safety | Current stable TS. Zustand 5 requires TS >= 4.5. Vite 8 has native TS support via Oxc. | HIGH |
+| Vite | 8.0.x | Build tool, dev server | Current stable. Uses Rolldown (Rust-based bundler) delivering 10-30x faster builds. Native CSS Modules support, native TS path alias resolution. Vitest 4.1 is fully compatible. | MEDIUM |
 
-## Feature-by-Feature Stack Analysis
+**Vite version rationale:** Vite 8 is a significant architecture change (Rolldown replaces esbuild+Rollup). For a greenfield project this is the right choice -- no migration burden, and it is the actively-developed version. Vite 6.4 still receives security patches but not feature work. If Vite 8 causes issues with any plugin, fall back to Vite 7.3 (which also has Rolldown support and receives important fixes).
 
-### 1. Filtering (Status / Assignee / Category, Multi-select OR)
+**React version rationale:** React 19 works with Tauri 2 (confirmed by community templates), but its headline features (server components, Actions, use() hook) are server-oriented and provide minimal benefit for a desktop kanban app. React 18.3 is stable, battle-tested, and avoids unnecessary migration risk.
 
-**What's needed:** Multi-select dropdown components with checkbox-style selection for filtering board cards.
+### Build Tooling
 
-**Recommendation: Build custom `MultiSelectFilter` component. Do NOT add a library.**
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| @vitejs/plugin-react-swc | 4.3.x | React Fast Refresh + JSX transform via SWC | Faster than Babel-based @vitejs/plugin-react. SWC handles JSX/TSX transform in dev. Note: Vite's future direction is Oxc, but SWC plugin works fine on Vite 8. | HIGH |
 
-| Approach | Bundle | Customization | Rationale |
-|----------|--------|---------------|-----------|
-| Custom component (CSS Modules) | 0 KB | Full control | Project uses Unicode-only icons, CSS Modules styling. Custom component integrates perfectly. |
-| react-multi-select-component | ~5 KB gzip | CSS variables | Styling via CSS variables (`--rmsc-*`), not CSS Modules. Would be the only component library in the project. Overkill for 3 simple filter dropdowns. |
-| react-select | ~12 KB gzip | Complex styled-components API | Far too heavy. Runtime CSS-in-JS conflicts with CSS Modules philosophy. |
+### Tauri Plugins
 
-**Why custom is correct:**
+| Plugin (JS) | Plugin (Rust) | Version | Purpose | Why | Confidence |
+|-------------|---------------|---------|---------|-----|------------|
+| @tauri-apps/plugin-http | tauri-plugin-http | 2.5.x | HTTP client for Backlog API | Official Tauri plugin. Provides fetch-like API that bypasses CORS entirely (requests go through Rust's reqwest). Supports custom headers for API key auth. | HIGH |
+| @tauri-apps/plugin-store | tauri-plugin-store | 2.4.x | Persistent key-value storage | Stores API key, host URL, project key, milestone prefix. Persists across app restarts. JSON-backed file on disk. | HIGH |
+| @tauri-apps/plugin-opener | tauri-plugin-opener | 2.5.x | Open URLs in default browser | Required for "card click opens Backlog issue in browser" feature. Replaces deprecated shell.open(). | HIGH |
 
-1. **Scope is narrow.** Only 3 filter dropdowns needed (status, assignee, category). Each has a known, finite list of options loaded from board data. No async search, no creation, no grouping needed.
-2. **Consistency.** The project has no external UI component libraries. Adding one for 3 dropdowns introduces a styling mismatch (CSS variables vs CSS Modules).
-3. **Implementation is ~100 lines.** A `MultiSelectFilter` component with: button trigger, dropdown panel with checkboxes, "select all/clear" buttons, click-outside-to-close. All styled with CSS Modules.
-4. **Filter state lives in Zustand.** Filter selections are pure state -- `{ statuses: number[], assignees: (number|null)[], categories: number[] }`. Applied as derived state via a selector that filters `BoardData.milestones[].issues`.
+### State Management
 
-**Existing stack used:**
-- Zustand 5 -- new `filterStore` or extend `boardStore` with filter slice
-- CSS Modules -- `MultiSelectFilter.module.css`
-- React `useState` -- local open/close state for dropdown panel
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| Zustand | 5.0.x | Client state management | PROJECT.md specifies Zustand for DnD-heavy frequent updates. v5.0.12 is current. Requires React 18+ (matches our stack). Uses native useSyncExternalStore. Lightweight (~1.1KB gzip). No boilerplate, no providers, selector-based re-rendering. | HIGH |
 
-**Confidence:** HIGH -- Multiple real-world examples of building custom multi-select with pure React + CSS. The feature scope doesn't justify a library.
+**Zustand 5 migration notes (for reference):** v5 drops default exports, requires React 18+, and has stricter TypeScript types on setState replace flag. Since this is greenfield, no migration needed -- use v5 patterns from the start.
 
-### 2. Sorting (Assignee / Due Date)
+### Drag and Drop
 
-**What's needed:** Sort cards within each lane by assignee name or due date.
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| @dnd-kit/core | 6.3.1 | Drag-and-drop primitives | PROJECT.md specifies @dnd-kit. v6.3.1 is the stable release with ~12M weekly downloads. Well-documented kanban patterns. Accessible by default. ~12KB gzip. | HIGH |
+| @dnd-kit/sortable | 10.0.0 | Sortable lists within lanes | Provides useSortable hook for card ordering within and across lanes. Works with @dnd-kit/core. | HIGH |
+| @dnd-kit/utilities | 3.2.2 | CSS transform utilities | Helper for applying transform styles to draggable elements. | HIGH |
 
-**Recommendation: Pure TypeScript comparator functions. Zero libraries.**
+**Why NOT @dnd-kit/react (the new rewrite):** The @dnd-kit/react package (v0.3.2) is the next-generation rewrite with a cleaner API, but it is still in 0.x (pre-stable). For a production kanban app, the legacy @dnd-kit/core (v6.3.1) is the safer choice with proven kanban patterns, extensive documentation, and community examples. Plan to migrate to @dnd-kit/react when it reaches 1.0.
 
-| Approach | Notes |
-|----------|-------|
-| Custom comparators | `Array.prototype.sort()` with `localeCompare` for names, date string comparison for dates |
-| lodash/sortBy | Adds ~25KB for a single function. Overkill. |
-| fast-sort | 1KB library, but standard Array.sort with a comparator is sufficient |
+### Styling
 
-**Implementation:**
-```typescript
-type SortKey = 'default' | 'assignee' | 'dueDate';
-type SortDirection = 'asc' | 'desc';
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| CSS Modules | (built into Vite) | Scoped component styles | PROJECT.md specifies CSS Modules. Zero-config in Vite 8. Naming convention: `Component.module.css`. No runtime cost. Team familiarity from existing prototype. | HIGH |
 
-function sortIssues(issues: BacklogIssue[], key: SortKey, dir: SortDirection): BacklogIssue[] {
-  if (key === 'default') return issues; // Server order
-  const sorted = [...issues].sort(comparatorFor(key));
-  return dir === 'desc' ? sorted.reverse() : sorted;
-}
-```
+### Notifications / Toast
 
-**Existing stack used:**
-- Zustand 5 -- sort key/direction in store
-- TypeScript -- type-safe comparator functions
-- Applied as derived state (same pipeline as filtering: raw data -> filter -> sort -> render)
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| sonner | 2.x | Toast notifications | Required for error toasts and optimistic update failure rollback feedback. Lightweight (~5KB), beautiful defaults, TypeScript-first. ~7M weekly downloads. Simpler API than react-toastify. | MEDIUM |
 
-**Confidence:** HIGH -- Standard JavaScript. No library needed.
+### Testing
 
-### 3. Intra-Lane DnD Reordering (Local Persistence)
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| Vitest | 4.1.x | Unit + integration tests | Vite-native test runner. v4.1.2 is current, fully compatible with Vite 8. Shares Vite config (transforms, aliases, CSS modules). | HIGH |
+| @testing-library/react | 16.x | React component testing | Standard React component testing. Renders in jsdom, tests user-visible behavior. | HIGH |
+| @testing-library/jest-dom | 6.x | DOM assertion matchers | Provides toBeInTheDocument(), toHaveClass(), etc. | HIGH |
+| jsdom | 26.x | DOM environment for Vitest | Vitest environment for rendering React components in tests. | HIGH |
 
-**What's needed:** Reorder cards within the same lane via drag-and-drop. Persist the custom order locally (not synced to Backlog API).
+### Linting and Formatting
 
-**Recommendation: Use existing @dnd-kit/sortable `arrayMove` + @tauri-apps/plugin-store. Zero new libraries.**
-
-**Already installed and verified:**
-- `@dnd-kit/sortable` v10.0.0 exports `arrayMove(array, from, to)` -- confirmed by reading the installed package's type definitions
-- `@dnd-kit/sortable` exports `verticalListSortingStrategy` -- already used in `Lane.tsx`
-- `SortableContext` already wraps issue cards in `Lane.tsx`
-- `useSortable` already used in `IssueCard.tsx`
-
-**What changes in the DnD flow:**
-1. Currently, `Board.tsx` `handleDragEnd` only handles cross-lane moves (`fromLaneId !== toLaneId`). Intra-lane reordering needs the `fromLaneId === toLaneId` case.
-2. Use `arrayMove` from `@dnd-kit/sortable` to compute the new order.
-3. Store custom order as `Record<string, number[]>` (laneId -> issueId order) in `@tauri-apps/plugin-store`.
-
-**Persistence via plugin-store (already installed):**
-- `@tauri-apps/plugin-store` v2.4.x is already used for `settings.json`
-- Add a second store file (e.g., `card-order.json`) or a new key in the existing store
-- `plugin-store` supports any JSON-serializable value. A `Record<string, number[]>` for lane -> issue ID ordering is ideal
-- Auto-save with 100ms debounce is built in
-
-**Key integration point:** When board data refreshes from Backlog API, merge the persisted order with fresh data. New issues (not in persisted order) go to the end. Removed issues are pruned from the persisted order.
-
-**Confidence:** HIGH -- `arrayMove` verified in installed package. `plugin-store` API verified from type definitions. `SortableContext` + `useSortable` already wired up.
-
-### 4. Multi-Select Bulk Lane Move
-
-**What's needed:** Select multiple cards (Ctrl+click / Shift+click), then drag them all to another lane.
-
-**Recommendation: Custom selection state in Zustand + custom DragOverlay. Zero new libraries.**
-
-**@dnd-kit does NOT have built-in multi-select drag.** This is a well-known limitation (GitHub issue #120, 160+ upvotes). The solution is to manage selection state externally and handle it in DnD callbacks.
-
-**Implementation approach:**
-1. **Selection store** (Zustand): `selectedIds: Set<number>`, toggle/range-select actions
-2. **Visual selection**: CSS class on selected cards (`IssueCard.module.css`)
-3. **Drag behavior**: When dragging a selected card, the `DragOverlay` shows a stacked card count badge. On `handleDragEnd`, move ALL selected cards to the target lane.
-4. **API calls**: Sequential `updateIssueMilestone` for each selected card (respecting Backlog API rate limits). Use existing optimistic update pattern with batch rollback on failure.
-
-**Existing stack used:**
-- Zustand 5 -- selection state
-- @dnd-kit/core -- `DragOverlay` (already used for single-card overlay)
-- CSS Modules -- selection highlight styling
-- sonner -- batch operation progress/error toasts
-
-**Keyboard integration:**
-- Ctrl+Click: Toggle individual card selection
-- Shift+Click: Range select within a lane
-- Escape: Clear selection
-- All achievable with standard React event handlers, no library needed
-
-**Confidence:** HIGH -- Pattern is well-documented in @dnd-kit community. Selection is pure state management. The DnD hooks don't need changes -- only the `handleDragEnd` callback needs to check for multi-selection.
-
----
-
-## Stack Additions Summary
-
-### New Dependencies: NONE
-
-| Feature | Existing Stack Component Used | How |
-|---------|-------------------------------|-----|
-| Multi-select filter dropdowns | CSS Modules + Zustand + React | Custom `MultiSelectFilter` component |
-| Sorting | TypeScript + Zustand | Pure comparator functions, sort key in store |
-| Intra-lane reorder | @dnd-kit/sortable `arrayMove` + plugin-store | Already installed, add reorder handler + persistence |
-| Multi-select bulk move | Zustand + @dnd-kit/core + CSS Modules | Selection state in store, batch move in `handleDragEnd` |
-
-### New Zustand State Additions
-
-```typescript
-// Option A: Extend boardStore
-interface BoardStoreState {
-  // ... existing fields ...
-  
-  // Filtering
-  filters: {
-    statuses: number[];
-    assignees: (number | null)[];  // null = unassigned
-    categories: number[];
-  };
-  setFilter: (key: keyof Filters, values: number[] | (number | null)[]) => void;
-  clearFilters: () => void;
-  
-  // Sorting
-  sortKey: 'default' | 'assignee' | 'dueDate';
-  sortDirection: 'asc' | 'desc';
-  setSort: (key: SortKey, direction?: SortDirection) => void;
-  
-  // Selection (for multi-select bulk move)
-  selectedIssueIds: Set<number>;
-  toggleSelect: (id: number) => void;
-  rangeSelect: (id: number, laneIssueIds: number[]) => void;
-  clearSelection: () => void;
-  
-  // Card order (for intra-lane reorder)
-  cardOrder: Record<string, number[]>;  // laneId -> issueId[]
-  reorderCards: (laneId: string, fromIndex: number, toIndex: number) => void;
-}
-
-// Option B: Separate stores (recommended for separation of concerns)
-// filterStore, selectionStore -- boardStore stays focused on data + API
-```
-
-**Recommendation: Option B (separate stores).** The boardStore is already ~180 lines. Filter/selection/order are UI concerns orthogonal to data fetching. Separate stores keep each under 100 lines and make testing easier.
-
-### New plugin-store Usage
-
-```typescript
-// card-order persistence via @tauri-apps/plugin-store
-// Key: `cardOrder:{projectKey}` to scope per-project
-// Value: Record<string, number[]>
-// Load on board fetch, save on reorder (auto-save debounce handles batching)
-```
-
----
-
-## What NOT to Add
-
-| Library | Why Not |
-|---------|---------|
-| react-multi-select-component | 5KB for 3 dropdowns. CSS variable theming doesn't match CSS Modules. Only external UI lib in the project. |
-| react-select | 12KB, runtime CSS-in-JS, wildly overkill for static filter lists. |
-| lodash | Only `sortBy` would be used. Standard `Array.sort` with a comparator is sufficient. |
-| immer | Zustand's spread-based immutability is working well. Immer adds ~6KB for a pattern the team already follows. |
-| @dnd-kit/accessibility | Not a real package. `@dnd-kit/core` already includes `KeyboardSensor` and ARIA announcements. |
-| uuid / nanoid | Selection uses issue IDs (numbers from Backlog API). No need for generated IDs. |
+| Technology | Version | Purpose | Why | Confidence |
+|------------|---------|---------|-----|------------|
+| ESLint | 9.x | Code linting | Flat config format. Use @eslint/js + typescript-eslint. | HIGH |
+| Prettier | 3.x | Code formatting | Consistent formatting. Integrates with ESLint via eslint-config-prettier. | HIGH |
 
 ---
 
 ## Alternatives Considered
 
-| Decision | Recommended | Alternative | Why Not Alternative |
-|----------|-------------|-------------|---------------------|
-| Filter dropdowns | Custom component | react-multi-select-component | Only 3 dropdowns needed. Library adds styling mismatch + dependency. |
-| Sort | Array.sort comparators | lodash sortBy | One-line comparators. No library needed for 2 sort keys. |
-| Card order persistence | plugin-store (existing) | Separate SQLite via plugin-sql | Overkill. Card order is a simple JSON map. plugin-store handles it perfectly. |
-| Selection state | Zustand Set<number> | React Context | Zustand is already the state management solution. No reason to add Context alongside it. |
-| Multi-drag UX | Custom selection + batch move | @dnd-kit multi-drag | @dnd-kit has no built-in multi-drag. Custom approach is the documented community pattern. |
+| Category | Recommended | Alternative | Why Not |
+|----------|-------------|-------------|---------|
+| Framework | Tauri 2 | Electron | 10x larger binary, higher memory usage. Tauri provides same capability for this use case. |
+| React Version | React 18.3 | React 19 | Server components irrelevant for desktop. 18.3 is stable, avoids migration risk. Upgrade path clear when needed. |
+| Build Tool | Vite 8 | Vite 6 | Vite 6 only gets security patches. Greenfield project should use current stable. |
+| State | Zustand 5 | Jotai | Zustand is simpler for this use case (single store, frequent DnD updates). Jotai's atomic model adds complexity without benefit here. |
+| State | Zustand 5 | Redux Toolkit | Overkill for a focused desktop app. Zustand has 1/10th the boilerplate. |
+| DnD | @dnd-kit/core 6.x | @dnd-kit/react 0.3.x | 0.x pre-stable. Insufficient docs and community patterns for kanban. Migrate when 1.0 ships. |
+| DnD | @dnd-kit/core 6.x | react-beautiful-dnd | Deprecated/unmaintained by Atlassian. No longer receiving updates. |
+| DnD | @dnd-kit/core 6.x | react-dnd | Heavier, more complex API, less accessible. |
+| Styling | CSS Modules | Tailwind CSS | Team already uses CSS Modules in existing Tauri prototype. No need to introduce new paradigm. |
+| Styling | CSS Modules | styled-components | Runtime CSS-in-JS has performance cost in DnD-heavy UIs. CSS Modules are zero-runtime. |
+| Toast | sonner | react-toastify | react-toastify is 16KB gzip vs sonner's ~5KB. sonner has cleaner API and better defaults. |
+| HTTP | @tauri-apps/plugin-http | Browser fetch | Browser fetch still subject to CORS in webview. Tauri HTTP plugin routes through Rust, bypassing CORS entirely. |
+| Storage | @tauri-apps/plugin-store | localStorage | localStorage does not persist reliably across Tauri app updates. plugin-store writes to filesystem with proper serialization. |
 
 ---
 
-## Version Compatibility (Verified)
+## Installation
 
-| Package | Installed Version | Used For (v1.1) | Status |
-|---------|-------------------|-----------------|--------|
-| @dnd-kit/sortable | 10.0.0 | `arrayMove`, `SortableContext`, `useSortable` | Already used. `arrayMove` export verified. |
-| @dnd-kit/core | 6.3.1 | `DndContext`, `DragOverlay`, sensors | Already used. No changes needed. |
-| @dnd-kit/utilities | 3.2.2 | `CSS.Transform.toString` | Already used. No changes needed. |
-| @tauri-apps/plugin-store | 2.4.2+ | Card order persistence | Already used for settings. Verified `set/get<T>` supports arbitrary JSON. |
-| zustand | 5.0.12+ | Filter, sort, selection stores | Already used. Multiple stores supported natively. |
+```bash
+# Create project (if starting fresh)
+npm create tauri-app@latest mileboard -- --template react-ts
+
+# Core dependencies
+npm install react@18.3 react-dom@18.3 zustand@5
+npm install @dnd-kit/core @dnd-kit/sortable @dnd-kit/utilities
+npm install sonner
+
+# Tauri plugins (JS side)
+npm install @tauri-apps/plugin-http @tauri-apps/plugin-store @tauri-apps/plugin-opener
+
+# Dev dependencies
+npm install -D typescript@5.7 vite@8 @vitejs/plugin-react-swc@4
+npm install -D vitest@4 jsdom @testing-library/react @testing-library/jest-dom
+npm install -D eslint@9 @eslint/js typescript-eslint prettier eslint-config-prettier
+npm install -D @types/react @types/react-dom
+```
+
+```toml
+# Cargo.toml (src-tauri/Cargo.toml) - Rust side of Tauri plugins
+[dependencies]
+tauri = { version = "2", features = [] }
+tauri-plugin-http = "2"
+tauri-plugin-store = "2"
+tauri-plugin-opener = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+---
+
+## Configuration Notes
+
+### Tauri Capabilities (src-tauri/capabilities/default.json)
+
+Tauri 2 requires explicit permission grants for plugins:
+
+```json
+{
+  "identifier": "default",
+  "description": "Default capabilities",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "http:default",
+    "store:default",
+    "opener:default"
+  ]
+}
+```
+
+The HTTP plugin also needs URL scope configuration to restrict which domains the app can contact:
+
+```json
+{
+  "permissions": [
+    {
+      "identifier": "http:default",
+      "allow": [{ "url": "https://*.backlog.com/**" }, { "url": "https://*.backlog.jp/**" }]
+    }
+  ]
+}
+```
+
+### Vite 8 Configuration (vite.config.ts)
+
+```typescript
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react-swc'
+
+export default defineConfig({
+  plugins: [react()],
+  resolve: {
+    tsconfigPaths: true, // New in Vite 8: native TS path alias support
+  },
+  server: {
+    port: 1420, // Tauri default
+    strictPort: true,
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true,
+    setupFiles: './src/test/setup.ts',
+  },
+})
+```
+
+### Backlog API Authentication
+
+Backlog API v2 supports two auth methods:
+1. **API Key** (simpler, recommended for desktop app) - append `?apiKey=xxx` to requests
+2. **OAuth 2.0** (more complex, token expires in 3600s)
+
+For a desktop app, API Key auth is sufficient and simpler. The key is stored in `@tauri-apps/plugin-store` on disk, never exposed to the webview's localStorage.
+
+### Backlog API Rate Limiting
+
+- Rate limits are per-user (not per-API-key)
+- Limits vary by plan (Free vs Paid) and request type (Read/Update/Search/Icon)
+- Response headers: `X-RateLimit-Limit`, `X-RateLimit-Remaining`, `X-RateLimit-Reset`
+- HTTP 429 returned when exceeded
+- Implementation: Read rate limit headers, implement sequential fetching with backoff for milestone + issue data loading
+
+---
+
+## Version Lock Strategy
+
+Pin major versions in package.json to avoid unintended breaking changes:
+
+```json
+{
+  "dependencies": {
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "zustand": "^5.0.0",
+    "@dnd-kit/core": "^6.3.0",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.0",
+    "sonner": "^2.0.0",
+    "@tauri-apps/plugin-http": "^2.5.0",
+    "@tauri-apps/plugin-store": "^2.4.0",
+    "@tauri-apps/plugin-opener": "^2.5.0"
+  }
+}
+```
 
 ---
 
 ## Sources
 
-- [@dnd-kit/sortable exports](https://github.com/clauderic/dnd-kit/blob/master/packages/sortable/src/utilities/arrayMove.ts) -- `arrayMove` verified in installed package type definitions
-- [@dnd-kit multi-select issue #120](https://github.com/clauderic/dnd-kit/issues/120) -- Confirms no built-in multi-select, documents custom pattern
-- [@dnd-kit sortable documentation](https://docs.dndkit.com/presets/sortable) -- SortableContext, verticalListSortingStrategy usage
-- [@dnd-kit keyboard sensor](https://docs.dndkit.com/api-documentation/sensors/keyboard) -- Built-in accessibility
-- [Tauri plugin-store documentation](https://v2.tauri.app/plugin/store/) -- Key-value persistence API
-- [@tauri-apps/plugin-store npm](https://www.npmjs.com/package/@tauri-apps/plugin-store) -- v2.4.2 API reference
-- [react-multi-select-component GitHub](https://github.com/hc-oss/react-multi-select-component) -- Evaluated and rejected (5KB, CSS variables, not CSS Modules)
-- [hello-pangea/dnd multi-drag pattern](https://github.com/hello-pangea/dnd/blob/main/docs/patterns/multi-drag.md) -- Multi-drag pattern reference (different library, same UX pattern)
-- Installed package analysis: `node_modules/@dnd-kit/sortable/dist/index.d.ts`, `node_modules/@tauri-apps/plugin-store/dist-js/index.d.ts` -- Direct verification of exports and APIs
-
----
-*Stack research for: mileboard v1.1*
-*Researched: 2026-04-08*
+- [Tauri 2.0 Stable Release](https://v2.tauri.app/blog/tauri-20/) - Tauri official blog
+- [Tauri Core Releases](https://v2.tauri.app/release/) - v2.10.3 current
+- [Tauri HTTP Client Plugin](https://v2.tauri.app/plugin/http-client/) - Official docs
+- [Tauri Store Plugin](https://v2.tauri.app/plugin/store/) - Official docs
+- [Tauri Opener Plugin](https://v2.tauri.app/plugin/opener/) - Official docs
+- [Vite 8.0 Announcement](https://vite.dev/blog/announcing-vite8) - Rolldown architecture
+- [Vite Releases](https://vite.dev/releases) - Version support policy
+- [Zustand v5 Migration](https://zustand.docs.pmnd.rs/reference/migrations/migrating-to-v5) - Breaking changes
+- [Zustand npm](https://www.npmjs.com/package/zustand) - v5.0.12, 20M weekly downloads
+- [@dnd-kit/core npm](https://www.npmjs.com/package/@dnd-kit/core) - v6.3.1, ~12M weekly downloads
+- [@dnd-kit/react npm](https://www.npmjs.com/package/@dnd-kit/react) - v0.3.2 (pre-stable)
+- [dnd-kit Migration Guide](https://dndkit.com/react/guides/migration) - core to react migration path
+- [Backlog API Overview](https://developer.nulab.com/docs/backlog/) - REST API v2
+- [Backlog Rate Limit](https://developer.nulab.com/docs/backlog/rate-limit/) - Per-user limits
+- [Backlog Authentication](https://developer.nulab.com/docs/backlog/auth/) - API key + OAuth 2.0
+- [Vitest npm](https://www.npmjs.com/package/vitest) - v4.1.2, Vite 8 compatible
+- [@vitejs/plugin-react-swc npm](https://www.npmjs.com/package/@vitejs/plugin-react-swc) - v4.3.0
+- [Sonner](https://sonner.emilkowal.ski/) - Toast component
+- [Vite CSS Modules](https://vite.dev/guide/features) - Built-in support
