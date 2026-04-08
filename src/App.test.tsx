@@ -17,8 +17,18 @@ vi.mock('./components/SettingsModal/SettingsModal', () => ({
   ),
 }));
 
-vi.mock('./components/BoardPlaceholder/BoardPlaceholder', () => ({
-  BoardPlaceholder: () => <div data-testid="board-placeholder">BoardPlaceholder</div>,
+vi.mock('./components/Board/Board', () => ({
+  Board: () => <div data-testid="board">Board</div>,
+}));
+
+vi.mock('./components/BoardHeader/BoardHeader', () => ({
+  BoardHeader: ({ onSettingsOpen }: { onSettingsOpen: () => void }) => (
+    <div data-testid="board-header">
+      <button aria-label="設定を開く" onClick={onSettingsOpen}>
+        ⚙
+      </button>
+    </div>
+  ),
 }));
 
 describe('App', () => {
@@ -46,15 +56,16 @@ describe('App', () => {
     render(<App />);
 
     expect(screen.getByTestId('settings-card')).toBeInTheDocument();
-    expect(screen.queryByTestId('board-placeholder')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('board')).not.toBeInTheDocument();
   });
 
-  it('renders BoardPlaceholder when isConfigured is true', () => {
+  it('renders Board when isConfigured is true', () => {
     useSettingsStore.setState({ isConfigured: true });
 
     render(<App />);
 
-    expect(screen.getByTestId('board-placeholder')).toBeInTheDocument();
+    expect(screen.getByTestId('board')).toBeInTheDocument();
+    expect(screen.getByTestId('board-header')).toBeInTheDocument();
     expect(screen.queryByTestId('settings-card')).not.toBeInTheDocument();
   });
 
