@@ -106,7 +106,7 @@ describe('tauriBridge', () => {
     it('throws string error on invoke rejection', async () => {
       mockInvoke.mockRejectedValue('APIキーが無効です');
       await expect(
-        fetchBoardData('example.backlog.com', 'key123', 'PROJ', 'Sprint'),
+        fetchBoardData('example.backlog.com', 'key123', 1, 'PROJ', 'Sprint'),
       ).rejects.toBe('APIキーが無効です');
     });
 
