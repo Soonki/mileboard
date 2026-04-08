@@ -22,6 +22,7 @@
   --color-accent-hover: #1D4ED8;
   --color-error: #DC2626;
   --color-success: #16A34A;
+  --color-warning: #F59E0B;
   --color-disabled: #9CA3AF;
   --color-border: #D1D5DB;
   --color-text-primary: #111827;
@@ -41,6 +42,7 @@
 
   /* Radii */
   --radius-input: 6px;
+  --radius-badge: 4px;
   --radius-card: 8px;
 
   /* Shadows */
