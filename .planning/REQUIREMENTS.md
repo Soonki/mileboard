@@ -18,7 +18,7 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **BOARD-01**: Prefix-matching milestones appear as chronological lanes (last month through 6 months ahead)
 - [ ] **BOARD-02**: Issues without a milestone appear in an "Unassigned" lane
 - [ ] **BOARD-03**: Each issue card displays key, title, status badge, assignee, and priority
-- [ ] **BOARD-04**: Cards are color-coded by status for visual distinction
+- [x] **BOARD-04**: Cards are color-coded by status for visual distinction
 - [ ] **BOARD-05**: Lane headers display total issue count
 - [ ] **BOARD-06**: Lane headers display member-by-member issue count breakdown
 
@@ -32,7 +32,7 @@ Requirements for initial release. Each maps to roadmap phases.
 
 - [ ] **UX-01**: Loading state displayed during initial data fetch
 - [ ] **UX-02**: Error toast displayed on API failure
-- [ ] **UX-03**: Clicking a card opens the Backlog issue in the default browser
+- [x] **UX-03**: Clicking a card opens the Backlog issue in the default browser
 
 ## v2 Requirements
 
@@ -90,7 +90,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BOARD-01 | Phase 3 | Pending |
 | BOARD-02 | Phase 3 | Pending |
 | BOARD-03 | Phase 3 | Pending |
-| BOARD-04 | Phase 4 | Pending |
+| BOARD-04 | Phase 4 | Complete |
 | BOARD-05 | Phase 4 | Pending |
 | BOARD-06 | Phase 4 | Pending |
 | DND-01 | Phase 5 | Pending |
@@ -98,7 +98,7 @@ Which phases cover which requirements. Updated during roadmap creation.
 | DND-03 | Phase 5 | Pending |
 | UX-01 | Phase 3 | Pending |
 | UX-02 | Phase 5 | Pending |
-| UX-03 | Phase 4 | Pending |
+| UX-03 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 15 total

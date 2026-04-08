@@ -84,7 +84,7 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01-PLAN.md — Utilities (colorContrast, memberBreakdown) + StatusBadge color + MemberBreakdown component + IssueCard click/ripple
+- [x] 04-01-PLAN.md — Utilities (colorContrast, memberBreakdown) + StatusBadge color + MemberBreakdown component + IssueCard click/ripple
 - [ ] 04-02-PLAN.md — LaneHeader enrichment (issue count, toggle, member breakdown) + Lane wiring + visual verification
 
 **UI hint**: yes
