@@ -1,0 +1,18 @@
+.indicator {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-label);
+  letter-spacing: -2px;
+}
+
+.high {
+  color: var(--color-error);
+}
+
+.medium {
+  color: var(--color-warning);
+}
+
+.low {
+  color: var(--color-success);
+}
