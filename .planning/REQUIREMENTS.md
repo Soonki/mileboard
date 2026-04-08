@@ -19,8 +19,8 @@ Requirements for initial release. Each maps to roadmap phases.
 - [ ] **BOARD-02**: Issues without a milestone appear in an "Unassigned" lane
 - [ ] **BOARD-03**: Each issue card displays key, title, status badge, assignee, and priority
 - [x] **BOARD-04**: Cards are color-coded by status for visual distinction
-- [ ] **BOARD-05**: Lane headers display total issue count
-- [ ] **BOARD-06**: Lane headers display member-by-member issue count breakdown
+- [x] **BOARD-05**: Lane headers display total issue count
+- [x] **BOARD-06**: Lane headers display member-by-member issue count breakdown
 
 ### Drag & Drop
 
@@ -91,8 +91,8 @@ Which phases cover which requirements. Updated during roadmap creation.
 | BOARD-02 | Phase 3 | Pending |
 | BOARD-03 | Phase 3 | Pending |
 | BOARD-04 | Phase 4 | Complete |
-| BOARD-05 | Phase 4 | Pending |
-| BOARD-06 | Phase 4 | Pending |
+| BOARD-05 | Phase 4 | Complete |
+| BOARD-06 | Phase 4 | Complete |
 | DND-01 | Phase 5 | Pending |
 | DND-02 | Phase 5 | Pending |
 | DND-03 | Phase 5 | Pending |
