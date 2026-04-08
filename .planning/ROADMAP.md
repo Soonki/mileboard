@@ -81,11 +81,11 @@ Plans:
   2. Each lane header displays the total issue count for that lane
   3. Each lane header shows a member-by-member breakdown of issue counts (workload distribution)
   4. Clicking an issue card opens the corresponding Backlog issue page in the user's default browser
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: TBD
-- [ ] 04-02: TBD
+- [ ] 04-01-PLAN.md — Utilities (colorContrast, memberBreakdown) + StatusBadge color + MemberBreakdown component + IssueCard click/ripple
+- [ ] 04-02-PLAN.md — LaneHeader enrichment (issue count, toggle, member breakdown) + Lane wiring + visual verification
 
 **UI hint**: yes
 
