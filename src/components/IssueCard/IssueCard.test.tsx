@@ -1,8 +1,18 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
 import { IssueCard } from './IssueCard';
 import type { BacklogIssue } from '../../types/backlog';
+import { openUrl } from '@tauri-apps/plugin-opener';
+
+vi.mock('../../stores/settingsStore', () => ({
+  useSettingsStore: vi.fn((selector: (s: { settings: { hostUrl: string } }) => string) =>
+    selector({ settings: { hostUrl: 'example.backlog.com' } }),
+  ),
+}));
+
+const { useSettingsStore } = await import('../../stores/settingsStore');
 
 function createMockIssue(overrides?: Partial<BacklogIssue>): BacklogIssue {
   return {
@@ -71,5 +81,54 @@ describe('IssueCard', () => {
   it('renders no priority indicator when priority is null', () => {
     render(<IssueCard issue={createMockIssue({ priority: null })} />);
     expect(screen.queryByText('▲')).not.toBeInTheDocument();
+  });
+
+  it('calls openUrl with correct Backlog URL on click', async () => {
+    const user = userEvent.setup();
+    render(<IssueCard issue={createMockIssue()} />);
+    await user.click(screen.getByRole('link'));
+    expect(openUrl).toHaveBeenCalledWith('https://example.backlog.com/view/TEST-1');
+  });
+
+  it('strips https:// from hostUrl before URL construction', async () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      (selector: (s: { settings: { hostUrl: string } }) => string) =>
+        selector({ settings: { hostUrl: 'https://example.backlog.com' } }),
+    );
+    const user = userEvent.setup();
+    render(<IssueCard issue={createMockIssue()} />);
+    await user.click(screen.getByRole('link'));
+    expect(openUrl).toHaveBeenCalledWith('https://example.backlog.com/view/TEST-1');
+  });
+
+  it('strips http:// from hostUrl before URL construction', async () => {
+    vi.mocked(useSettingsStore).mockImplementation(
+      (selector: (s: { settings: { hostUrl: string } }) => string) =>
+        selector({ settings: { hostUrl: 'http://example.backlog.com' } }),
+    );
+    const user = userEvent.setup();
+    render(<IssueCard issue={createMockIssue()} />);
+    await user.click(screen.getByRole('link'));
+    expect(openUrl).toHaveBeenCalledWith('https://example.backlog.com/view/TEST-1');
+  });
+
+  it('does not throw when openUrl fails', async () => {
+    vi.mocked(openUrl).mockRejectedValueOnce(new Error('opener failed'));
+    const user = userEvent.setup();
+    render(<IssueCard issue={createMockIssue()} />);
+    await expect(user.click(screen.getByRole('link'))).resolves.not.toThrow();
+  });
+
+  it('has role="link" and aria-label with issue key', () => {
+    render(<IssueCard issue={createMockIssue()} />);
+    const link = screen.getByRole('link', { name: 'TEST-1をBacklogで開く' });
+    expect(link).toBeInTheDocument();
+  });
+
+  it('passes status color to StatusBadge', () => {
+    render(<IssueCard issue={createMockIssue()} />);
+    const badge = screen.getByLabelText('未対応');
+    // StatusBadge with color="#ed8077" applies inline backgroundColor
+    expect(badge.style.backgroundColor).toBe('rgb(237, 128, 119)');
   });
 });
