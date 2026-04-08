@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [ ] **Phase 1: Foundation & Connection Settings** - Tauri scaffold with settings form that validates and persists Backlog API connection
 - [ ] **Phase 2: Backlog Data Pipeline** - Rust API client with rate limiting, milestone/issue fetching, and typed IPC bridge
 - [ ] **Phase 3: Core Kanban Board** - Milestone lanes with issue cards, unassigned lane, and loading states
-- [ ] **Phase 4: Board Enrichment** - Status color coding, lane header stats, member breakdown, and card-to-browser linking
+- [x] **Phase 4: Board Enrichment** - Status color coding, lane header stats, member breakdown, and card-to-browser linking
 - [ ] **Phase 5: Drag & Drop with Optimistic Updates** - Cross-lane drag-and-drop, milestone mutation, optimistic UI, rollback, multi-milestone handling, and error toasts
 
 ## Phase Details
@@ -117,6 +117,6 @@ Phases execute in numeric order: 1 -> 2 -> 3 -> 4 -> 5
 |-------|----------------|--------|-----------|
 | 1. Foundation & Connection Settings | 3/3 | Complete | 2026-04-07 |
 | 2. Backlog Data Pipeline | 3/3 | Complete | 2026-04-08 |
-| 3. Core Kanban Board | 0/3 | Not started | - |
-| 4. Board Enrichment | 0/2 | Not started | - |
+| 3. Core Kanban Board | 3/3 | Complete | 2026-04-08 |
+| 4. Board Enrichment | 2/2 | Complete | 2026-04-08 |
 | 5. Drag & Drop with Optimistic Updates | 0/3 | Not started | - |
