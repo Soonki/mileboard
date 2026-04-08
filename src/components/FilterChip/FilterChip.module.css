@@ -1,0 +1,36 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-xs);
+  background: var(--color-chip-bg);
+  color: var(--color-chip-text);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-badge);
+  font-size: var(--font-size-label);
+  outline: none;
+  transition: opacity var(--transition-fast);
+}
+
+.chip:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.label {
+  white-space: nowrap;
+}
+
+.removeButton {
+  background: none;
+  border: none;
+  color: var(--color-chip-remove);
+  cursor: pointer;
+  padding: var(--space-xs);
+  font-size: var(--font-size-label);
+  line-height: 1;
+  transition: color var(--transition-fast);
+}
+
+.removeButton:hover {
+  color: var(--color-chip-remove-hover);
+}
