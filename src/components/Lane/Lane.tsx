@@ -1,4 +1,5 @@
 import type { BacklogIssue } from '../../types/backlog';
+import { computeMemberBreakdown } from '../../utils/memberBreakdown';
 import { LaneHeader } from '../LaneHeader/LaneHeader';
 import { IssueCard } from '../IssueCard/IssueCard';
 import { EmptyLane } from '../EmptyLane/EmptyLane';
@@ -12,12 +13,17 @@ interface LaneProps {
 }
 
 export function Lane({ name, startDate, releaseDueDate, issues }: LaneProps) {
+  const issueCount = issues.length;
+  const memberBreakdown = computeMemberBreakdown(issues);
+
   return (
     <div className={styles.lane} role="region" aria-label={name}>
       <LaneHeader
         name={name}
         startDate={startDate}
         releaseDueDate={releaseDueDate}
+        issueCount={issueCount}
+        memberBreakdown={memberBreakdown}
       />
       <div className={styles.cardList}>
         {issues.length === 0 ? (

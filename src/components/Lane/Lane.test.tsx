@@ -47,7 +47,7 @@ describe('Lane', () => {
         issues={[]}
       />,
     );
-    expect(screen.getByText('Sprint 2504')).toBeInTheDocument();
+    expect(screen.getByText(/Sprint 2504/)).toBeInTheDocument();
   });
 
   it('renders date range in header', () => {
@@ -101,5 +101,57 @@ describe('Lane', () => {
       />,
     );
     expect(screen.getByRole('region', { name: 'Sprint 2504' })).toBeInTheDocument();
+  });
+
+  it('displays issue count in lane header', () => {
+    const issues = [
+      createMockIssue({ id: 1, issueKey: 'TEST-1' }),
+      createMockIssue({ id: 2, issueKey: 'TEST-2' }),
+    ];
+    render(
+      <Lane
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={issues}
+      />,
+    );
+    expect(screen.getByText(/Sprint 2504 \(2\)/)).toBeInTheDocument();
+  });
+
+  it('shows toggle button when issues have assignees', () => {
+    const issues = [
+      createMockIssue({
+        id: 1,
+        issueKey: 'TEST-1',
+        assignee: { id: 1, userId: 'u1', name: 'Alice', roleType: 1, mailAddress: 'a@t.com' },
+      }),
+      createMockIssue({
+        id: 2,
+        issueKey: 'TEST-2',
+        assignee: { id: 2, userId: 'u2', name: 'Bob', roleType: 1, mailAddress: 'b@t.com' },
+      }),
+    ];
+    render(
+      <Lane
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={issues}
+      />,
+    );
+    expect(screen.getByRole('button', { name: /内訳/ })).toBeInTheDocument();
+  });
+
+  it('does not show toggle button when issues array is empty', () => {
+    render(
+      <Lane
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={[]}
+      />,
+    );
+    expect(screen.queryByRole('button')).not.toBeInTheDocument();
   });
 });

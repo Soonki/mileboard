@@ -1,9 +1,14 @@
+import { useState } from 'react';
+import type { MemberCount } from '../../utils/memberBreakdown';
+import { MemberBreakdown } from '../MemberBreakdown/MemberBreakdown';
 import styles from './LaneHeader.module.css';
 
 interface LaneHeaderProps {
   name: string;
   startDate: string | null;
   releaseDueDate: string | null;
+  issueCount: number;
+  memberBreakdown: MemberCount[];
 }
 
 function formatDateRange(
@@ -30,15 +35,41 @@ function formatDateRange(
   return `~${formatDate(releaseDueDate!)}`;
 }
 
-export function LaneHeader({ name, startDate, releaseDueDate }: LaneHeaderProps) {
+export function LaneHeader({
+  name,
+  startDate,
+  releaseDueDate,
+  issueCount,
+  memberBreakdown,
+}: LaneHeaderProps) {
+  const [isExpanded, setIsExpanded] = useState(false);
   const dateRange = formatDateRange(startDate, releaseDueDate);
 
   return (
     <div className={styles.header}>
-      <div className={styles.name}>{name}</div>
+      <div className={styles.titleRow}>
+        <div className={styles.name}>
+          {name} ({issueCount})
+        </div>
+        {memberBreakdown.length > 0 && (
+          <button
+            className={styles.toggleButton}
+            onClick={() => setIsExpanded((prev) => !prev)}
+            aria-expanded={isExpanded}
+            aria-label={isExpanded ? '内訳を閉じる' : '内訳を開く'}
+          >
+            {isExpanded ? '\u25B2' : '\u25BC'}
+          </button>
+        )}
+      </div>
       {dateRange !== null && (
         <div className={styles.dateRange}>{dateRange}</div>
       )}
+      <div
+        className={`${styles.breakdownContainer} ${isExpanded ? styles.expanded : ''}`}
+      >
+        {isExpanded && <MemberBreakdown members={memberBreakdown} />}
+      </div>
     </div>
   );
 }
