@@ -1,0 +1,31 @@
+.badge {
+  font-size: var(--font-size-sm);
+  color: var(--color-warning);
+  cursor: help;
+  position: relative;
+  margin-left: var(--space-xs);
+}
+
+.badge::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--color-text-primary);
+  color: var(--color-surface);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  border-radius: var(--radius-badge);
+  max-width: 240px;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 300ms;
+  transition-delay: 300ms;
+  z-index: 10;
+}
+
+.badge:hover::after {
+  opacity: 1;
+}
