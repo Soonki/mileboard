@@ -46,10 +46,10 @@
   overflow: hidden;
   max-height: 0;
   opacity: 0;
-  transition: max-height var(--transition-normal), opacity var(--transition-normal);
+  transition: max-height 250ms ease-in-out, opacity var(--transition-normal);
 }
 
 .expanded {
-  max-height: 300px;
+  max-height: 800px;
   opacity: 1;
 }

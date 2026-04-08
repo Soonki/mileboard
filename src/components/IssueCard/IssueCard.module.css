@@ -11,7 +11,7 @@
 }
 
 .card:hover {
-  background-color: var(--color-bg);
+  background-color: #ECEEF0;
 }
 
 .card:active::after {

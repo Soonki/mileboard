@@ -65,11 +65,14 @@ export function LaneHeader({
       {dateRange !== null && (
         <div className={styles.dateRange}>{dateRange}</div>
       )}
-      <div
-        className={`${styles.breakdownContainer} ${isExpanded ? styles.expanded : ''}`}
-      >
-        {isExpanded && <MemberBreakdown members={memberBreakdown} />}
-      </div>
+      {memberBreakdown.length > 0 && (
+        <div
+          className={`${styles.breakdownContainer} ${isExpanded ? styles.expanded : ''}`}
+          aria-hidden={!isExpanded}
+        >
+          <MemberBreakdown members={memberBreakdown} />
+        </div>
+      )}
     </div>
   );
 }
