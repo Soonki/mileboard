@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
@@ -11,8 +11,11 @@ import type { DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core'
 import { Toaster } from 'sonner';
 import { useBoardStore, findIssueInBoardData } from '../../stores/boardStore';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useFilterStore } from '../../stores/filterStore';
+import { applyFilters } from '../../utils/filterUtils';
 import type { BacklogIssue } from '../../types/backlog';
 import type { BoardData } from '../../types/board';
+import type { FilterState } from '../../types/filter';
 import { Lane } from '../Lane/Lane';
 import { DragOverlayCard } from '../DragOverlayCard/DragOverlayCard';
 import { BoardSkeleton } from '../BoardSkeleton/BoardSkeleton';
@@ -59,6 +62,41 @@ export function Board() {
   const fetchBoard = useBoardStore((s) => s.fetchBoard);
   const moveIssue = useBoardStore((s) => s.moveIssue);
   const milestonePrefix = useSettingsStore((s) => s.settings.milestonePrefix);
+
+  const statusIds = useFilterStore((s) => s.statusIds);
+  const assigneeIds = useFilterStore((s) => s.assigneeIds);
+  const categoryIds = useFilterStore((s) => s.categoryIds);
+
+  // D-09: dataはraw unfiltered、ビュー層でのみフィルタ適用
+  const filteredView = useMemo(() => {
+    if (!data) return null;
+    const filters: FilterState = { statusIds, assigneeIds, categoryIds };
+    const hasFilters =
+      statusIds.size > 0 || assigneeIds.size > 0 || categoryIds.size > 0;
+
+    const unassignedFiltered = hasFilters
+      ? applyFilters(data.unassignedIssues, filters)
+      : data.unassignedIssues;
+
+    return {
+      milestones: data.milestones.map((mwi) => {
+        const filtered = hasFilters
+          ? applyFilters(mwi.issues, filters)
+          : mwi.issues;
+        return {
+          milestone: mwi.milestone,
+          filteredIssues: filtered,
+          hiddenCount: hasFilters ? mwi.issues.length - filtered.length : 0,
+        };
+      }),
+      unassigned: {
+        filteredIssues: unassignedFiltered,
+        hiddenCount: hasFilters
+          ? data.unassignedIssues.length - unassignedFiltered.length
+          : 0,
+      },
+    };
+  }, [data, statusIds, assigneeIds, categoryIds]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -125,27 +163,35 @@ export function Board() {
           role="region"
           aria-label="カンバンボード"
         >
-          <Lane
-            laneId="unassigned"
-            name="未割り当て"
-            startDate={null}
-            releaseDueDate={null}
-            issues={data.unassignedIssues}
-            milestonePrefix={milestonePrefix}
-            isDropTarget={overLaneId === 'unassigned'}
-          />
-          {data.milestones.map(({ milestone, issues }) => (
-            <Lane
-              key={milestone.id}
-              laneId={`milestone-${milestone.id}`}
-              name={milestone.name}
-              startDate={milestone.startDate}
-              releaseDueDate={milestone.releaseDueDate}
-              issues={issues}
-              milestonePrefix={milestonePrefix}
-              isDropTarget={overLaneId === `milestone-${milestone.id}`}
-            />
-          ))}
+          {filteredView && (
+            <>
+              <Lane
+                laneId="unassigned"
+                name="未割り当て"
+                startDate={null}
+                releaseDueDate={null}
+                issues={filteredView.unassigned.filteredIssues}
+                hiddenCount={filteredView.unassigned.hiddenCount}
+                milestonePrefix={milestonePrefix}
+                isDropTarget={overLaneId === 'unassigned'}
+              />
+              {filteredView.milestones.map(
+                ({ milestone, filteredIssues, hiddenCount }) => (
+                  <Lane
+                    key={milestone.id}
+                    laneId={`milestone-${milestone.id}`}
+                    name={milestone.name}
+                    startDate={milestone.startDate}
+                    releaseDueDate={milestone.releaseDueDate}
+                    issues={filteredIssues}
+                    hiddenCount={hiddenCount}
+                    milestonePrefix={milestonePrefix}
+                    isDropTarget={overLaneId === `milestone-${milestone.id}`}
+                  />
+                ),
+              )}
+            </>
+          )}
         </div>
         <DragOverlay>
           {activeIssue ? <DragOverlayCard issue={activeIssue} /> : null}

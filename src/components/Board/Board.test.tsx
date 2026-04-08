@@ -22,6 +22,15 @@ vi.mock('../../stores/settingsStore', () => ({
   ),
 }));
 
+vi.mock('../../stores/filterStore', () => ({
+  useFilterStore: (selector: (s: Record<string, unknown>) => unknown) =>
+    selector({
+      statusIds: new Set(),
+      assigneeIds: new Set(),
+      categoryIds: new Set(),
+    }),
+}));
+
 vi.mock('../Lane/Lane', () => ({
   Lane: ({ name, laneId }: { name: string; laneId: string }) => (
     <div data-testid={`lane-${name}`} data-lane-id={laneId}>

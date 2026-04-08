@@ -18,6 +18,7 @@ interface LaneProps {
   issues: BacklogIssue[];
   milestonePrefix: string;
   isDropTarget?: boolean;
+  hiddenCount?: number;
 }
 
 export function Lane({
@@ -28,6 +29,7 @@ export function Lane({
   issues,
   milestonePrefix,
   isDropTarget = false,
+  hiddenCount = 0,
 }: LaneProps) {
   const { setNodeRef } = useDroppable({ id: laneId });
   const issueCount = issues.length;
@@ -51,7 +53,13 @@ export function Lane({
       <SortableContext items={issueIds} strategy={verticalListSortingStrategy}>
         <div className={styles.cardList}>
           {issues.length === 0 ? (
-            <EmptyLane />
+            hiddenCount > 0 ? (
+              <div className={styles.filteredEmpty}>
+                {hiddenCount}件がフィルタで非表示
+              </div>
+            ) : (
+              <EmptyLane />
+            )
           ) : (
             issues.map((issue) => (
               <IssueCard

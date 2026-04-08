@@ -4,6 +4,8 @@ import { SettingsCard } from './components/SettingsCard/SettingsCard';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
 import { Board } from './components/Board/Board';
 import { BoardHeader } from './components/BoardHeader/BoardHeader';
+import { FilterBar } from './components/FilterBar/FilterBar';
+import styles from './App.module.css';
 
 function App() {
   const isConfigured = useSettingsStore((s) => s.isConfigured);
@@ -19,13 +21,14 @@ function App() {
   }
 
   return (
-    <>
+    <div className={styles.appLayout}>
       <BoardHeader onSettingsOpen={() => setShowSettings(true)} />
+      <FilterBar />
       <Board />
       {showSettings && (
         <SettingsModal onClose={() => setShowSettings(false)} />
       )}
-    </>
+    </div>
   );
 }
 

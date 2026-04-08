@@ -182,4 +182,46 @@ describe('Lane', () => {
     );
     expect(useDroppable).toHaveBeenCalledWith({ id: 'milestone-42' });
   });
+
+  it('shows filtered-empty message when issues empty and hiddenCount > 0', () => {
+    render(
+      <Lane
+        {...defaultProps}
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={[]}
+        hiddenCount={5}
+      />,
+    );
+    expect(screen.getByText('5件がフィルタで非表示')).toBeInTheDocument();
+    expect(screen.queryByText('課題なし')).not.toBeInTheDocument();
+  });
+
+  it('shows EmptyLane when issues empty and hiddenCount is 0', () => {
+    render(
+      <Lane
+        {...defaultProps}
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={[]}
+        hiddenCount={0}
+      />,
+    );
+    expect(screen.getByText('課題なし')).toBeInTheDocument();
+  });
+
+  it('shows EmptyLane when issues empty and hiddenCount not provided', () => {
+    render(
+      <Lane
+        {...defaultProps}
+        name="Sprint 2504"
+        startDate={null}
+        releaseDueDate={null}
+        issues={[]}
+      />,
+    );
+    expect(screen.getByText('課題なし')).toBeInTheDocument();
+  });
 });
