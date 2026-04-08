@@ -1,0 +1,10 @@
+.board {
+  display: flex;
+  flex-direction: row;
+  overflow-x: auto;
+  height: calc(100vh - 56px);
+  padding: var(--space-md);
+  gap: var(--space-md);
+  background: var(--color-bg);
+  scroll-behavior: smooth;
+}

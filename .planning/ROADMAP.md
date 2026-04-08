@@ -66,8 +66,8 @@ Plans:
 **Plans**: 3 plans
 
 Plans:
-- [ ] 03-01-PLAN.md — boardStore (Zustand state management) + Phase 3 CSS design tokens in global.css
-- [ ] 03-02-PLAN.md — Leaf presentational components: StatusBadge, PriorityIndicator, IssueCard, EmptyLane with tests
+- [x] 03-01-PLAN.md — boardStore (Zustand state management) + Phase 3 CSS design tokens in global.css
+- [x] 03-02-PLAN.md — Leaf presentational components: StatusBadge, PriorityIndicator, IssueCard, EmptyLane with tests
 - [ ] 03-03-PLAN.md — Board assembly: Lane, LaneHeader, BoardSkeleton, BoardError, BoardHeader, Board + App.tsx wiring + visual verification
 
 **UI hint**: yes
