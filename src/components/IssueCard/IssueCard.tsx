@@ -3,6 +3,7 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { BacklogIssue } from '../../types/backlog';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useSortStore } from '../../stores/sortStore';
 import { StatusBadge } from '../StatusBadge/StatusBadge';
 import { PriorityIndicator } from '../PriorityIndicator/PriorityIndicator';
 import { WarningBadge } from '../WarningBadge/WarningBadge';
@@ -20,6 +21,7 @@ export function IssueCard({ issue, laneId, milestonePrefix }: IssueCardProps) {
     m.name.startsWith(milestonePrefix),
   );
   const isMultiMilestone = prefixMilestones.length > 1;
+  const isSortActive = useSortStore((s) => s.field !== 'none');
 
   // Other milestone names (excluding current lane's milestone, for WarningBadge tooltip)
   const otherMilestoneNames = issue.milestone
@@ -35,7 +37,7 @@ export function IssueCard({ issue, laneId, milestonePrefix }: IssueCardProps) {
     isDragging,
   } = useSortable({
     id: issue.id,
-    disabled: isMultiMilestone,
+    disabled: isMultiMilestone || isSortActive,
   });
 
   const style = {
@@ -61,7 +63,7 @@ export function IssueCard({ issue, laneId, milestonePrefix }: IssueCardProps) {
       style={style}
       {...attributes}
       {...listeners}
-      className={`${styles.card} ${isDragging ? styles.cardDragging : ''} ${isMultiMilestone ? styles.cardDragDisabled : ''}`}
+      className={`${styles.card} ${isDragging ? styles.cardDragging : ''} ${isMultiMilestone || isSortActive ? styles.cardDragDisabled : ''}`}
       onClick={handleClick}
       role="link"
       aria-label={`${issue.issueKey}をBacklogで開く`}

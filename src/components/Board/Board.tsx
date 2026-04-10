@@ -13,8 +13,10 @@ import { useBoardStore, findIssueInBoardData } from '../../stores/boardStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFilterStore } from '../../stores/filterStore';
 import { useSortStore } from '../../stores/sortStore';
+import { useReorderStore } from '../../stores/reorderStore';
 import { applyFilters } from '../../utils/filterUtils';
 import { applySortToIssues } from '../../utils/sortUtils';
+import { applyCustomOrder } from '../../utils/reorderUtils';
 import type { BacklogIssue } from '../../types/backlog';
 import type { BoardData } from '../../types/board';
 import type { FilterState } from '../../types/filter';
@@ -72,6 +74,10 @@ export function Board() {
   const sortField = useSortStore((s) => s.field);
   const sortDirection = useSortStore((s) => s.direction);
 
+  const orderMap = useReorderStore((s) => s.orderMap);
+  const reorder = useReorderStore((s) => s.reorder);
+  const updateOnCrossLaneMove = useReorderStore((s) => s.updateOnCrossLaneMove);
+
   // D-09: dataはraw unfiltered、ビュー層でのみフィルタ・ソート適用
   const filteredAndSortedView = useMemo(() => {
     if (!data) return null;
@@ -83,6 +89,9 @@ export function Board() {
       ? applyFilters(data.unassignedIssues, filters)
       : data.unassignedIssues;
     const unassignedSorted = applySortToIssues(unassignedFiltered, sortField, sortDirection);
+    const unassignedOrdered = sortField === 'none'
+      ? applyCustomOrder(unassignedSorted, orderMap['unassigned'] ?? [])
+      : unassignedSorted;
 
     return {
       milestones: data.milestones.map((mwi) => {
@@ -90,20 +99,24 @@ export function Board() {
           ? applyFilters(mwi.issues, filters)
           : mwi.issues;
         const sorted = applySortToIssues(filtered, sortField, sortDirection);
+        const laneId = `milestone-${mwi.milestone.id}`;
+        const ordered = sortField === 'none'
+          ? applyCustomOrder(sorted, orderMap[laneId] ?? [])
+          : sorted;
         return {
           milestone: mwi.milestone,
-          filteredIssues: sorted,
+          filteredIssues: ordered,
           hiddenCount: hasFilters ? mwi.issues.length - filtered.length : 0,
         };
       }),
       unassigned: {
-        filteredIssues: unassignedSorted,
+        filteredIssues: unassignedOrdered,
         hiddenCount: hasFilters
           ? data.unassignedIssues.length - unassignedFiltered.length
           : 0,
       },
     };
-  }, [data, statusIds, assigneeIds, categoryIds, sortField, sortDirection]);
+  }, [data, statusIds, assigneeIds, categoryIds, sortField, sortDirection, orderMap]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -126,6 +139,16 @@ export function Board() {
     setOverLaneId(resolveOverLaneId(data, event.over.id));
   };
 
+  /** filteredAndSortedView から指定レーンの課題リストを取得する */
+  const getLaneIssues = (laneId: string): BacklogIssue[] => {
+    if (!filteredAndSortedView) return [];
+    if (laneId === 'unassigned') return filteredAndSortedView.unassigned.filteredIssues;
+    const ms = filteredAndSortedView.milestones.find(
+      (m) => `milestone-${m.milestone.id}` === laneId,
+    );
+    return ms?.filteredIssues ?? [];
+  };
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveIssue(null);
     setOverLaneId(null);
@@ -134,8 +157,28 @@ export function Board() {
     const fromLaneId = findLaneContaining(data, event.active.id as number);
     const toLaneId = resolveOverLaneId(data, event.over.id);
 
-    if (fromLaneId && toLaneId && fromLaneId !== toLaneId) {
+    if (!fromLaneId || !toLaneId) return;
+
+    if (fromLaneId === toLaneId) {
+      // レーン内並べ替え（REORD-01）
+      // ソートモード中は何もしない（useSortable disabled で DnD 自体が発火しないが、安全のためガード）
+      if (sortField !== 'none') return;
+      const activeId = event.active.id as number;
+      const overId = event.over.id as number;
+      if (activeId !== overId) {
+        // orderMap に laneId がない場合、現在の表示順から初期 orderMap を構築
+        const currentOrderMap = orderMap[fromLaneId];
+        if (!currentOrderMap || currentOrderMap.length === 0) {
+          const laneIssues = getLaneIssues(fromLaneId);
+          const issueIds = laneIssues.map((i) => i.id);
+          useReorderStore.getState().setLaneOrder(fromLaneId, issueIds);
+        }
+        reorder(fromLaneId, activeId, overId);
+      }
+    } else {
+      // レーン間移動（既存ロジック）
       moveIssue(event.active.id as number, fromLaneId, toLaneId);
+      updateOnCrossLaneMove(event.active.id as number, fromLaneId, toLaneId);
     }
   };
 

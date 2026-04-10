@@ -7,6 +7,12 @@ import type { BacklogIssue } from '../../types/backlog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useSortable } from '@dnd-kit/sortable';
 
+vi.mock('../../stores/sortStore', () => ({
+  useSortStore: vi.fn((selector: (s: { field: string; direction: string }) => unknown) =>
+    selector({ field: 'none', direction: 'asc' }),
+  ),
+}));
+
 vi.mock('../../stores/settingsStore', () => ({
   useSettingsStore: vi.fn((selector: (s: { settings: { hostUrl: string } }) => string) =>
     selector({ settings: { hostUrl: 'example.backlog.com' } }),
@@ -260,6 +266,31 @@ describe('IssueCard', () => {
     );
     const card = container.firstChild as HTMLElement;
     expect(card.className).toContain('cardDragging');
+  });
+
+  it('disables sorting when sort is active', async () => {
+    const { useSortStore } = await import('../../stores/sortStore');
+    vi.mocked(useSortStore).mockImplementation(
+      ((selector: (s: { field: string; direction: string }) => unknown) =>
+        selector({ field: 'assignee', direction: 'asc' })) as typeof useSortStore,
+    );
+    render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
+    expect(useSortable).toHaveBeenCalledWith(
+      expect.objectContaining({ disabled: true }),
+    );
+  });
+
+  it('applies cardDragDisabled class when sort is active', async () => {
+    const { useSortStore } = await import('../../stores/sortStore');
+    vi.mocked(useSortStore).mockImplementation(
+      ((selector: (s: { field: string; direction: string }) => unknown) =>
+        selector({ field: 'dueDate', direction: 'asc' })) as typeof useSortStore,
+    );
+    const { container } = render(
+      <IssueCard issue={createMockIssue()} {...defaultProps} />,
+    );
+    const card = container.firstChild as HTMLElement;
+    expect(card.className).toContain('cardDragDisabled');
   });
 
   it('applies cardDragDisabled class for multi-milestone cards', () => {

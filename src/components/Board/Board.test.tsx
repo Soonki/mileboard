@@ -57,6 +57,29 @@ vi.mock('../../utils/sortUtils', () => ({
   applySortToIssues: vi.fn((issues: unknown[]) => issues),
 }));
 
+const mockReorderState = {
+  orderMap: {} as Record<string, number[]>,
+  reorder: vi.fn(),
+  updateOnCrossLaneMove: vi.fn(),
+  setLaneOrder: vi.fn(),
+  removeLaneOrder: vi.fn(),
+  loadFromStorage: vi.fn(),
+};
+
+vi.mock('../../stores/reorderStore', () => ({
+  useReorderStore: Object.assign(
+    (selector: (s: typeof mockReorderState) => unknown) =>
+      selector(mockReorderState),
+    {
+      getState: () => mockReorderState,
+    },
+  ),
+}));
+
+vi.mock('../../utils/reorderUtils', () => ({
+  applyCustomOrder: vi.fn((issues: unknown[]) => issues),
+}));
+
 vi.mock('../Lane/Lane', () => ({
   Lane: ({
     name,
@@ -130,6 +153,10 @@ describe('Board', () => {
     };
     mockSortState.field = 'none';
     mockSortState.direction = 'asc';
+    mockReorderState.orderMap = {};
+    mockReorderState.reorder.mockClear();
+    mockReorderState.updateOnCrossLaneMove.mockClear();
+    mockReorderState.setLaneOrder.mockClear();
   });
 
   it('renders skeleton when loading', () => {
@@ -302,6 +329,33 @@ describe('Board', () => {
       render(<Board />);
       // applySortToIssues should be called for unassigned + each milestone
       expect(applySortToIssues).toHaveBeenCalled();
+    });
+  });
+
+  describe('reorder integration', () => {
+    it('calls applyCustomOrder when sortField is none', async () => {
+      const { applyCustomOrder } = await import('../../utils/reorderUtils');
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: mockBoardData,
+      };
+      mockSortState.field = 'none';
+      render(<Board />);
+      expect(applyCustomOrder).toHaveBeenCalled();
+    });
+
+    it('does not call applyCustomOrder when sortField is not none', async () => {
+      const { applyCustomOrder } = await import('../../utils/reorderUtils');
+      vi.mocked(applyCustomOrder).mockClear();
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: mockBoardData,
+      };
+      mockSortState.field = 'assignee';
+      render(<Board />);
+      expect(applyCustomOrder).not.toHaveBeenCalled();
     });
   });
 });
