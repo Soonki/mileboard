@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useBoardStore } from '../../stores/boardStore';
 import { useFilterStore } from '../../stores/filterStore';
+import { useSortStore } from '../../stores/sortStore';
 import {
   extractStatusOptions,
   extractAssigneeOptions,
@@ -9,6 +10,7 @@ import {
 import type { FilterOption } from '../../types/filter';
 import { FilterDropdown } from '../FilterDropdown/FilterDropdown';
 import { FilterChip } from '../FilterChip/FilterChip';
+import { SortDropdown } from '../SortDropdown/SortDropdown';
 import styles from './FilterBar.module.css';
 
 export function FilterBar() {
@@ -21,6 +23,10 @@ export function FilterBar() {
   const toggleCategory = useFilterStore((s) => s.toggleCategory);
   const removeFilter = useFilterStore((s) => s.removeFilter);
   const clearAll = useFilterStore((s) => s.clearAll);
+
+  const sortField = useSortStore((s) => s.field);
+  const sortDirection = useSortStore((s) => s.direction);
+  const toggleDirection = useSortStore((s) => s.toggleDirection);
 
   const allIssues = useMemo(() => {
     if (!data) return [];
@@ -51,7 +57,7 @@ export function FilterBar() {
     statusIds.size > 0 || assigneeIds.size > 0 || categoryIds.size > 0;
 
   return (
-    <div className={styles.filterBar} role="toolbar" aria-label="フィルタ">
+    <div className={styles.filterBar} role="toolbar" aria-label="フィルタとソート">
       <div className={styles.dropdowns}>
         <FilterDropdown
           label="ステータス"
@@ -71,6 +77,18 @@ export function FilterBar() {
           selectedIds={categoryIds}
           onToggle={toggleCategory}
         />
+        <div className={styles.separator} role="separator" aria-orientation="vertical" />
+        <div className={styles.sortControls}>
+          <SortDropdown />
+          <button
+            type="button"
+            className={`${styles.directionToggle} ${sortField !== 'none' ? styles.directionActive : styles.directionInactive}`}
+            onClick={toggleDirection}
+            aria-label={sortDirection === 'asc' ? '降順に切り替え' : '昇順に切り替え'}
+          >
+            {sortDirection === 'asc' ? '\u2191' : '\u2193'}
+          </button>
+        </div>
       </div>
       <div className={styles.chips}>
         {statusOptions

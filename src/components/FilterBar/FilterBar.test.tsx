@@ -2,6 +2,26 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom';
+import type { SortField, SortDirection } from '../../types/sort';
+
+// Mock sortStore state
+const mockSortState = {
+  field: 'none' as SortField,
+  direction: 'asc' as SortDirection,
+  setField: vi.fn(),
+  toggleDirection: vi.fn(),
+  loadFromStorage: vi.fn(),
+};
+
+vi.mock('../../stores/sortStore', () => ({
+  useSortStore: (selector: (s: typeof mockSortState) => unknown) =>
+    selector(mockSortState),
+}));
+
+// Mock SortDropdown component
+vi.mock('../SortDropdown/SortDropdown', () => ({
+  SortDropdown: () => <div data-testid="sort-dropdown">SortDropdown</div>,
+}));
 
 // Mock filterStore state
 const mockFilterState: {
@@ -126,12 +146,16 @@ describe('FilterBar', () => {
     mockFilterState.toggleCategory = vi.fn();
     mockFilterState.removeFilter = vi.fn();
     mockFilterState.clearAll = vi.fn();
+    mockSortState.field = 'none';
+    mockSortState.direction = 'asc';
+    mockSortState.setField = vi.fn();
+    mockSortState.toggleDirection = vi.fn();
   });
 
   describe('rendering', () => {
     it('renders with role="toolbar" and aria-label', () => {
       render(<FilterBar />);
-      expect(screen.getByRole('toolbar', { name: 'フィルタ' })).toBeInTheDocument();
+      expect(screen.getByRole('toolbar', { name: 'フィルタとソート' })).toBeInTheDocument();
     });
 
     it('renders 3 filter dropdown triggers', () => {
@@ -237,6 +261,47 @@ describe('FilterBar', () => {
       render(<FilterBar />);
       await user.click(screen.getByRole('button', { name: '未対応のフィルタを解除' }));
       expect(mockFilterState.removeFilter).toHaveBeenCalledWith('status', 1);
+    });
+  });
+
+  describe('sort integration', () => {
+    it('renders separator between filter dropdowns and sort controls', () => {
+      render(<FilterBar />);
+      expect(screen.getByRole('separator')).toBeInTheDocument();
+    });
+
+    it('renders SortDropdown component', () => {
+      render(<FilterBar />);
+      expect(screen.getByTestId('sort-dropdown')).toBeInTheDocument();
+    });
+
+    it('renders direction toggle button with aria-label for asc', () => {
+      mockSortState.direction = 'asc';
+      render(<FilterBar />);
+      expect(screen.getByRole('button', { name: '降順に切り替え' })).toBeInTheDocument();
+    });
+
+    it('renders direction toggle button with aria-label for desc', () => {
+      mockSortState.direction = 'desc';
+      render(<FilterBar />);
+      expect(screen.getByRole('button', { name: '昇順に切り替え' })).toBeInTheDocument();
+    });
+
+    it('direction toggle shows U+2191 for asc, U+2193 for desc', () => {
+      mockSortState.direction = 'asc';
+      const { rerender } = render(<FilterBar />);
+      expect(screen.getByRole('button', { name: '降順に切り替え' })).toHaveTextContent('\u2191');
+
+      mockSortState.direction = 'desc';
+      rerender(<FilterBar />);
+      expect(screen.getByRole('button', { name: '昇順に切り替え' })).toHaveTextContent('\u2193');
+    });
+
+    it('clicking direction toggle calls toggleDirection', async () => {
+      const user = userEvent.setup();
+      render(<FilterBar />);
+      await user.click(screen.getByRole('button', { name: '降順に切り替え' }));
+      expect(mockSortState.toggleDirection).toHaveBeenCalledOnce();
     });
   });
 });
