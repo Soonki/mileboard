@@ -19,6 +19,7 @@ export function FilterDropdown({
   const [focusedIndex, setFocusedIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const close = useCallback(() => {
     setIsOpen(false);
@@ -56,6 +57,9 @@ export function FilterDropdown({
     if (e.key === 'Escape') {
       e.preventDefault();
       close();
+      // WAI-ARIA Listbox Pattern: restore focus to the trigger on Escape
+      // so keyboard users can continue tabbing without jumping to body.
+      triggerRef.current?.focus();
       return;
     }
     // Disable keyboard navigation when there are no options
@@ -88,6 +92,7 @@ export function FilterDropdown({
   return (
     <div className={styles.container} ref={containerRef}>
       <button
+        ref={triggerRef}
         type="button"
         className={triggerClassName}
         onClick={handleTriggerClick}
