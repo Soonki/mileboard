@@ -38,8 +38,8 @@ Phases continue numbering from previous milestone (never restart at 01).
 **Plans:** 2 plans
 
 Plans:
-- [ ] 07-01-PLAN.md — Sort型定義 + sortUtils純粋関数 + sortStorage永続化 + sortStore
-- [ ] 07-02-PLAN.md — SortDropdown UI + FilterBar統合 + Board.tsxソートパイプライン + 動作確認
+- [x] 07-01-PLAN.md — Sort型定義 + sortUtils純粋関数 + sortStorage永続化 + sortStore
+- [x] 07-02-PLAN.md — SortDropdown UI + FilterBar統合 + Board.tsxソートパイプライン + 動作確認
 
 **Constraints:**
 - ソートはフィルタと共存する（フィルタ適用後のカードに対してソート）

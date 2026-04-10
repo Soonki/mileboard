@@ -4,14 +4,14 @@ milestone: v1.1
 milestone_name: フィルタリング・ソート・一括操作
 status: verifying
 stopped_at: Phase 7 context gathered
-last_updated: "2026-04-10T14:19:53.708Z"
-last_activity: 2026-04-09 -- Phase 6 complete
+last_updated: "2026-04-10T15:12:05.551Z"
+last_activity: 2026-04-10
 progress:
   total_phases: 3
-  completed_phases: 0
-  total_plans: 0
-  completed_plans: 0
-  percent: 25
+  completed_phases: 1
+  total_plans: 2
+  completed_plans: 2
+  percent: 100
 ---
 
 # Project State
@@ -25,10 +25,10 @@ See: .planning/PROJECT.md (updated 2026-04-08)
 
 ## Current Position
 
-Phase: 6 of 9 (フィルタリング) — COMPLETE
-Plan: 3 of 3
+Phase: 8 of 9 (レーン内並べ替え)
+Plan: Not started
 Status: Phase complete — verification approved
-Last activity: 2026-04-09 -- Phase 6 complete
+Last activity: 2026-04-10
 
 Progress: [#######-----------------------] 25% (v1.1)
 
@@ -36,7 +36,7 @@ Progress: [#######-----------------------] 25% (v1.1)
 
 **Velocity:**
 
-- Total plans completed: 17 (v1.0: 14, v1.1: 3)
+- Total plans completed: 19 (v1.0: 14, v1.1: 3)
 - Average duration: carried from v1.0
 - Total execution time: carried from v1.0
 
@@ -49,6 +49,7 @@ Progress: [#######-----------------------] 25% (v1.1)
 | 7. ソート | — | — | — |
 | 8. レーン内並べ替え | — | — | — |
 | 9. 複数選択・一括移動 | — | — | — |
+| 07 | 2 | - | - |
 
 *Updated after each plan completion*
 
