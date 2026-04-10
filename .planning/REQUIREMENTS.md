@@ -24,8 +24,8 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 
 ### レーン内並べ替え
 
-- [ ] **REORD-01**: レーン内でカードをDnDして並び順を変更できる
-- [ ] **REORD-02**: カスタム並び順がアプリ再起動後も保持される（plugin-store）
+- [x] **REORD-01**: レーン内でカードをDnDして並び順を変更できる
+- [x] **REORD-02**: カスタム並び順がアプリ再起動後も保持される（plugin-store）
 - [ ] **REORD-03**: ソートモード中は手動並べ替えが無効になり、モード表示される
 
 ### 複数選択・一括移動
@@ -63,8 +63,8 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 | SORT-02 | Phase 7 | Pending |
 | SORT-03 | Phase 7 | Pending |
 | SORT-04 | Phase 7 | Pending |
-| REORD-01 | Phase 8 | Pending |
-| REORD-02 | Phase 8 | Pending |
+| REORD-01 | Phase 8 | Complete |
+| REORD-02 | Phase 8 | Complete |
 | REORD-03 | Phase 8 | Pending |
 | BULK-01 | Phase 9 | Pending |
 | BULK-02 | Phase 9 | Pending |
