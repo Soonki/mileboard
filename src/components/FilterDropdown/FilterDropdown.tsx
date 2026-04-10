@@ -58,6 +58,10 @@ export function FilterDropdown({
       close();
       return;
     }
+    // Disable keyboard navigation when there are no options
+    // (avoids NaN from (prev + 1) % 0 and invalid -1 focusedIndex state).
+    if (options.length === 0) return;
+
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setFocusedIndex((prev) => (prev + 1) % options.length);
