@@ -9,7 +9,7 @@
 **Progress:** 1/4 phases complete
 
 - [x] **Phase 6: フィルタリング** (3 plans) — COMPLETE 2026-04-09 — FILT-01, FILT-02, FILT-03, FILT-04, FILT-05
-- [ ] **Phase 7: ソート** — SORT-01, SORT-02, SORT-03, SORT-04
+- [ ] **Phase 7: ソート** (2 plans) — SORT-01, SORT-02, SORT-03, SORT-04
 - [ ] **Phase 8: レーン内並べ替え** — REORD-01, REORD-02, REORD-03
 - [ ] **Phase 9: 複数選択・一括移動** — BULK-01, BULK-02, BULK-03
 
@@ -34,6 +34,12 @@ Phases continue numbering from previous milestone (never restart at 01).
 **Requirements:** SORT-01, SORT-02, SORT-03, SORT-04
 
 **Depends on:** Phase 6 (フィルタリング — FilterBar UIパターン、boardStore構造)
+
+**Plans:** 2 plans
+
+Plans:
+- [ ] 07-01-PLAN.md — Sort型定義 + sortUtils純粋関数 + sortStorage永続化 + sortStore
+- [ ] 07-02-PLAN.md — SortDropdown UI + FilterBar統合 + Board.tsxソートパイプライン + 動作確認
 
 **Constraints:**
 - ソートはフィルタと共存する（フィルタ適用後のカードに対してソート）
