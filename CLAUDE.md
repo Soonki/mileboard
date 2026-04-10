@@ -87,18 +87,6 @@ npm run tauri build        # Production binary
 
 ## Backlog API
 
-- 認証: APIキー（URLクエリパラメータ `apiKey=`）
+- 認証: APIキー
 - レート制限: `X-RateLimit-Remaining` ヘッダーを監視、429時はバックオフ
 - レーン範囲: 先月〜6ヶ月先（約7レーン）
-- ストレージ: `plugin-store` でAPIキー・ホスト・プロジェクトキー・マイルストーンプレフィックスを永続化
-
-## Planning
-
-GSDワークフローで開発を管理。計画ドキュメントは `.planning/` に格納。
-
-- `/gsd-quick` — 小規模修正
-- `/gsd-debug` — バグ調査
-- `/gsd-execute-phase` — フェーズ実行
-- `/gsd-progress` — 進捗確認
-
-直接のファイル編集はGSDワークフロー経由で行う（ユーザーが明示的にバイパスを指示した場合を除く）。

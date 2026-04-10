@@ -319,12 +319,7 @@ impl BacklogClient {
         api_key: &str,
         issue_id_or_key: &str,
     ) -> Result<Issue, BacklogError> {
-        let url = build_url(
-            host,
-            &format!("/issues/{issue_id_or_key}"),
-            api_key,
-            &[],
-        );
+        let url = build_url(host, &format!("/issues/{issue_id_or_key}"), api_key, &[]);
         let response = self
             .http
             .get(&url)
@@ -362,12 +357,7 @@ impl BacklogClient {
         let issue = self.fetch_issue(host, api_key, issue_id_or_key).await?;
         let milestone_ids = rebuild_milestone_ids(&issue.milestone, new_milestone_id, prefix);
 
-        let url = build_url(
-            host,
-            &format!("/issues/{issue_id_or_key}"),
-            api_key,
-            &[],
-        );
+        let url = build_url(host, &format!("/issues/{issue_id_or_key}"), api_key, &[]);
 
         let form_params: Vec<(&str, String)> = if milestone_ids.is_empty() {
             vec![("milestoneId[]", String::new())]
@@ -502,9 +492,14 @@ fn map_reqwest_error(err: reqwest::Error) -> BacklogError {
     if err.is_timeout() {
         BacklogError::Timeout
     } else if err.is_connect() {
-        BacklogError::ConnectionFailed(err.to_string())
+        // Do not include the full URL in error messages — it contains the API key
+        BacklogError::ConnectionFailed("接続に失敗しました".into())
     } else {
-        BacklogError::FetchFailed(err.to_string())
+        let detail = err
+            .status()
+            .map(|s| format!("HTTP {}", s.as_u16()))
+            .unwrap_or_else(|| "不明なエラー".into());
+        BacklogError::FetchFailed(detail)
     }
 }
 
