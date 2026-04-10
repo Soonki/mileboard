@@ -40,6 +40,23 @@ vi.mock('../../stores/filterStore', () => ({
     selector(mockFilterState),
 }));
 
+const mockSortState = {
+  field: 'none' as const,
+  direction: 'asc' as const,
+  setField: vi.fn(),
+  toggleDirection: vi.fn(),
+  loadFromStorage: vi.fn(),
+};
+
+vi.mock('../../stores/sortStore', () => ({
+  useSortStore: (selector: (s: typeof mockSortState) => unknown) =>
+    selector(mockSortState),
+}));
+
+vi.mock('../../utils/sortUtils', () => ({
+  applySortToIssues: vi.fn((issues: unknown[]) => issues),
+}));
+
 vi.mock('../Lane/Lane', () => ({
   Lane: ({
     name,
@@ -111,6 +128,8 @@ describe('Board', () => {
       assigneeIds: new Set(),
       categoryIds: new Set(),
     };
+    mockSortState.field = 'none';
+    mockSortState.direction = 'asc';
   });
 
   it('renders skeleton when loading', () => {
@@ -269,6 +288,20 @@ describe('Board', () => {
       const lane = screen.getByTestId('lane-Sprint 2504');
       expect(lane).toHaveAttribute('data-hidden-count', '0');
       expect(lane).toHaveAttribute('data-issue-count', '1');
+    });
+  });
+
+  describe('sort integration', () => {
+    it('calls applySortToIssues when board data is loaded', async () => {
+      const { applySortToIssues } = await import('../../utils/sortUtils');
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: mockBoardData,
+      };
+      render(<Board />);
+      // applySortToIssues should be called for unassigned + each milestone
+      expect(applySortToIssues).toHaveBeenCalled();
     });
   });
 });

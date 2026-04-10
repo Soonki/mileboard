@@ -12,7 +12,9 @@ import { Toaster } from 'sonner';
 import { useBoardStore, findIssueInBoardData } from '../../stores/boardStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFilterStore } from '../../stores/filterStore';
+import { useSortStore } from '../../stores/sortStore';
 import { applyFilters } from '../../utils/filterUtils';
+import { applySortToIssues } from '../../utils/sortUtils';
 import type { BacklogIssue } from '../../types/backlog';
 import type { BoardData } from '../../types/board';
 import type { FilterState } from '../../types/filter';
@@ -67,8 +69,11 @@ export function Board() {
   const assigneeIds = useFilterStore((s) => s.assigneeIds);
   const categoryIds = useFilterStore((s) => s.categoryIds);
 
-  // D-09: dataはraw unfiltered、ビュー層でのみフィルタ適用
-  const filteredView = useMemo(() => {
+  const sortField = useSortStore((s) => s.field);
+  const sortDirection = useSortStore((s) => s.direction);
+
+  // D-09: dataはraw unfiltered、ビュー層でのみフィルタ・ソート適用
+  const filteredAndSortedView = useMemo(() => {
     if (!data) return null;
     const filters: FilterState = { statusIds, assigneeIds, categoryIds };
     const hasFilters =
@@ -77,26 +82,28 @@ export function Board() {
     const unassignedFiltered = hasFilters
       ? applyFilters(data.unassignedIssues, filters)
       : data.unassignedIssues;
+    const unassignedSorted = applySortToIssues(unassignedFiltered, sortField, sortDirection);
 
     return {
       milestones: data.milestones.map((mwi) => {
         const filtered = hasFilters
           ? applyFilters(mwi.issues, filters)
           : mwi.issues;
+        const sorted = applySortToIssues(filtered, sortField, sortDirection);
         return {
           milestone: mwi.milestone,
-          filteredIssues: filtered,
+          filteredIssues: sorted,
           hiddenCount: hasFilters ? mwi.issues.length - filtered.length : 0,
         };
       }),
       unassigned: {
-        filteredIssues: unassignedFiltered,
+        filteredIssues: unassignedSorted,
         hiddenCount: hasFilters
           ? data.unassignedIssues.length - unassignedFiltered.length
           : 0,
       },
     };
-  }, [data, statusIds, assigneeIds, categoryIds]);
+  }, [data, statusIds, assigneeIds, categoryIds, sortField, sortDirection]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -163,19 +170,19 @@ export function Board() {
           role="region"
           aria-label="カンバンボード"
         >
-          {filteredView && (
+          {filteredAndSortedView && (
             <>
               <Lane
                 laneId="unassigned"
                 name="未割り当て"
                 startDate={null}
                 releaseDueDate={null}
-                issues={filteredView.unassigned.filteredIssues}
-                hiddenCount={filteredView.unassigned.hiddenCount}
+                issues={filteredAndSortedView.unassigned.filteredIssues}
+                hiddenCount={filteredAndSortedView.unassigned.hiddenCount}
                 milestonePrefix={milestonePrefix}
                 isDropTarget={overLaneId === 'unassigned'}
               />
-              {filteredView.milestones.map(
+              {filteredAndSortedView.milestones.map(
                 ({ milestone, filteredIssues, hiddenCount }) => (
                   <Lane
                     key={milestone.id}
