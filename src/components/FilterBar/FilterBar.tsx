@@ -63,7 +63,7 @@ export function FilterBar() {
           label="ステータス"
           options={statusOptions}
           selectedIds={statusIds}
-          onToggle={toggleStatus}
+          onToggle={(id) => { if (id !== null) toggleStatus(id); }}
         />
         <FilterDropdown
           label="担当者"
@@ -75,7 +75,7 @@ export function FilterBar() {
           label="カテゴリ"
           options={categoryOptions}
           selectedIds={categoryIds}
-          onToggle={toggleCategory}
+          onToggle={(id) => { if (id !== null) toggleCategory(id); }}
         />
         <div className={styles.separator} role="separator" aria-orientation="vertical" />
         <div className={styles.sortControls}>
