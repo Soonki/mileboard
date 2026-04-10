@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSettingsStore } from './stores/settingsStore';
 import { useSortStore } from './stores/sortStore';
+import { useReorderStore } from './stores/reorderStore';
 import { SettingsCard } from './components/SettingsCard/SettingsCard';
 import { SettingsModal } from './components/SettingsModal/SettingsModal';
 import { Board } from './components/Board/Board';
@@ -12,6 +13,7 @@ function App() {
   const isConfigured = useSettingsStore((s) => s.isConfigured);
   const loadFromStorage = useSettingsStore((s) => s.loadFromStorage);
   const loadSortFromStorage = useSortStore((s) => s.loadFromStorage);
+  const loadReorderFromStorage = useReorderStore((s) => s.loadFromStorage);
   const [showSettings, setShowSettings] = useState(false);
 
   useEffect(() => {
@@ -21,6 +23,10 @@ function App() {
   useEffect(() => {
     loadSortFromStorage();
   }, [loadSortFromStorage]);
+
+  useEffect(() => {
+    loadReorderFromStorage();
+  }, [loadReorderFromStorage]);
 
   if (!isConfigured) {
     return <SettingsCard />;
