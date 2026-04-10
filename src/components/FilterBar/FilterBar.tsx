@@ -6,6 +6,7 @@ import {
   extractAssigneeOptions,
   extractCategoryOptions,
 } from '../../utils/filterUtils';
+import type { FilterOption } from '../../types/filter';
 import { FilterDropdown } from '../FilterDropdown/FilterDropdown';
 import { FilterChip } from '../FilterChip/FilterChip';
 import styles from './FilterBar.module.css';
@@ -73,7 +74,10 @@ export function FilterBar() {
       </div>
       <div className={styles.chips}>
         {statusOptions
-          .filter((o) => statusIds.has(o.id as number))
+          .filter(
+            (o): o is FilterOption & { id: number } =>
+              o.id !== null && statusIds.has(o.id),
+          )
           .map((o) => (
             <FilterChip
               key={`status-${o.id}`}
@@ -91,7 +95,10 @@ export function FilterBar() {
             />
           ))}
         {categoryOptions
-          .filter((o) => categoryIds.has(o.id as number))
+          .filter(
+            (o): o is FilterOption & { id: number } =>
+              o.id !== null && categoryIds.has(o.id),
+          )
           .map((o) => (
             <FilterChip
               key={`category-${o.id}`}
