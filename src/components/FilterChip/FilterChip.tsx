@@ -6,7 +6,11 @@ interface FilterChipProps {
 }
 
 export function FilterChip({ label, onRemove }: FilterChipProps) {
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLSpanElement>) => {
+    // Ignore Enter/Delete events that bubbled up from the inner button.
+    // The button natively fires onClick on Enter/Space, so handling it
+    // again here would cause onRemove to be called twice.
+    if (e.target !== e.currentTarget) return;
     if (e.key === 'Enter' || e.key === 'Delete') {
       e.preventDefault();
       onRemove();

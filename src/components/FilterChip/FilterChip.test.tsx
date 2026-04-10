@@ -87,5 +87,17 @@ describe('FilterChip', () => {
       await user.keyboard('{Tab}');
       expect(onRemove).not.toHaveBeenCalled();
     });
+
+    it('does not call onRemove twice when Enter is pressed on inner button', async () => {
+      const onRemove = vi.fn();
+      const user = userEvent.setup();
+      render(<FilterChip {...defaultProps} onRemove={onRemove} />);
+      const removeButton = screen.getByRole('button', {
+        name: '処理中のフィルタを解除',
+      });
+      removeButton.focus();
+      await user.keyboard('{Enter}');
+      expect(onRemove).toHaveBeenCalledTimes(1);
+    });
   });
 });
