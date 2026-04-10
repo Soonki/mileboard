@@ -319,12 +319,7 @@ impl BacklogClient {
         api_key: &str,
         issue_id_or_key: &str,
     ) -> Result<Issue, BacklogError> {
-        let url = build_url(
-            host,
-            &format!("/issues/{issue_id_or_key}"),
-            api_key,
-            &[],
-        );
+        let url = build_url(host, &format!("/issues/{issue_id_or_key}"), api_key, &[]);
         let response = self
             .http
             .get(&url)
@@ -362,12 +357,7 @@ impl BacklogClient {
         let issue = self.fetch_issue(host, api_key, issue_id_or_key).await?;
         let milestone_ids = rebuild_milestone_ids(&issue.milestone, new_milestone_id, prefix);
 
-        let url = build_url(
-            host,
-            &format!("/issues/{issue_id_or_key}"),
-            api_key,
-            &[],
-        );
+        let url = build_url(host, &format!("/issues/{issue_id_or_key}"), api_key, &[]);
 
         let form_params: Vec<(&str, String)> = if milestone_ids.is_empty() {
             vec![("milestoneId[]", String::new())]
