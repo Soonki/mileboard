@@ -21,7 +21,6 @@ export function FilterBar() {
   const toggleCategory = useFilterStore((s) => s.toggleCategory);
   const removeFilter = useFilterStore((s) => s.removeFilter);
   const clearAll = useFilterStore((s) => s.clearAll);
-  const hasActiveFilters = useFilterStore((s) => s.hasActiveFilters);
 
   const allIssues = useMemo(() => {
     if (!data) return [];
@@ -48,7 +47,8 @@ export function FilterBar() {
 
   if (!data) return null;
 
-  const activeFilters = hasActiveFilters();
+  const activeFilters =
+    statusIds.size > 0 || assigneeIds.size > 0 || categoryIds.size > 0;
 
   return (
     <div className={styles.filterBar} role="toolbar" aria-label="フィルタ">
