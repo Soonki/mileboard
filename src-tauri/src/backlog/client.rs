@@ -502,9 +502,14 @@ fn map_reqwest_error(err: reqwest::Error) -> BacklogError {
     if err.is_timeout() {
         BacklogError::Timeout
     } else if err.is_connect() {
-        BacklogError::ConnectionFailed(err.to_string())
+        // Do not include the full URL in error messages — it contains the API key
+        BacklogError::ConnectionFailed("接続に失敗しました".into())
     } else {
-        BacklogError::FetchFailed(err.to_string())
+        let detail = err
+            .status()
+            .map(|s| format!("HTTP {}", s.as_u16()))
+            .unwrap_or_else(|| "不明なエラー".into());
+        BacklogError::FetchFailed(detail)
     }
 }
 

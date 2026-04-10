@@ -26,3 +26,7 @@ dist-ssr
 # Internal development tooling
 .planning/
 .claude/
+
+# Environment variables
+.env
+.env.*

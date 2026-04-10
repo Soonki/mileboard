@@ -29,8 +29,9 @@ Thank you for your interest in contributing! This guide will help you get starte
 git clone https://github.com/Soonki/mileboard.git
 cd mileboard
 npm install
-npm run tauri dev
 ```
+
+> **Note:** Before running `npm run tauri dev`, ensure all [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) are installed for your OS. Without them, the Rust build will fail.
 
 ## Code Style
 

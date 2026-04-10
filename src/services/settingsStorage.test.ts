@@ -23,7 +23,7 @@ describe('settingsStorage', () => {
     const result = await loadSettings();
 
     expect(result).toBeNull();
-    expect(load).toHaveBeenCalledWith('settings.json', { autoSave: false });
+    expect(load).toHaveBeenCalledWith('settings.json', { autoSave: false, defaults: {} });
     expect(mockStore.get).toHaveBeenCalledWith('connection');
   });
 
@@ -39,7 +39,7 @@ describe('settingsStorage', () => {
     const { saveSettings } = await import('./settingsStorage');
     await saveSettings(settings);
 
-    expect(load).toHaveBeenCalledWith('settings.json', { autoSave: false });
+    expect(load).toHaveBeenCalledWith('settings.json', { autoSave: false, defaults: {} });
     expect(mockStore.set).toHaveBeenCalledWith('connection', settings);
     expect(mockStore.save).toHaveBeenCalled();
     // Verify save is called after set
