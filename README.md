@@ -21,8 +21,8 @@ Built with [Tauri 2](https://v2.tauri.app/), React, and Rust.
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Desktop shell | Tauri | 2.x |
-| Frontend | React + TypeScript | 19.x / 5.8.x |
-| Build | Vite | 7.x |
+| Frontend | React + TypeScript | 19.x / 6.0.x |
+| Build | Vite | 8.x |
 | State | Zustand | 5.x |
 | Drag & Drop | @dnd-kit/core + sortable | 6.x / 10.x |
 | Styling | CSS Modules | built-in |
