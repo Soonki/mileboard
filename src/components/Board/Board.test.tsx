@@ -40,9 +40,9 @@ vi.mock('../../stores/filterStore', () => ({
     selector(mockFilterState),
 }));
 
-const mockSortState = {
-  field: 'none' as const,
-  direction: 'asc' as const,
+const mockSortState: { field: string; direction: string; setField: ReturnType<typeof vi.fn>; toggleDirection: ReturnType<typeof vi.fn>; loadFromStorage: ReturnType<typeof vi.fn> } = {
+  field: 'none',
+  direction: 'asc',
   setField: vi.fn(),
   toggleDirection: vi.fn(),
   loadFromStorage: vi.fn(),

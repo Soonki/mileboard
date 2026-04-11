@@ -9,7 +9,7 @@ const REORDER_KEY = 'reorder';
  * 不正値の場合はnullを返す（デフォルト値にフォールバック）。
  */
 export async function loadReorderConfig(): Promise<ReorderMap | null> {
-  const store = await load(STORE_FILE, { autoSave: false });
+  const store = await load(STORE_FILE, { defaults: {}, autoSave: false });
   const data = await store.get<ReorderMap>(REORDER_KEY);
 
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -30,7 +30,7 @@ export async function loadReorderConfig(): Promise<ReorderMap | null> {
  * ReorderMapをplugin-storeに保存する。
  */
 export async function saveReorderConfig(orderMap: ReorderMap): Promise<void> {
-  const store = await load(STORE_FILE, { autoSave: false });
+  const store = await load(STORE_FILE, { defaults: {}, autoSave: false });
   await store.set(REORDER_KEY, orderMap);
   await store.save();
 }

@@ -12,7 +12,7 @@ const VALID_DIRECTIONS: readonly SortDirection[] = ['asc', 'desc'];
  * 不正値の場合はnullを返す（デフォルト値にフォールバック）。
  */
 export async function loadSortConfig(): Promise<SortConfig | null> {
-  const store = await load(STORE_FILE, { autoSave: false });
+  const store = await load(STORE_FILE, { defaults: {}, autoSave: false });
   const config = await store.get<SortConfig>(SORT_KEY);
 
   if (!config) {
@@ -34,7 +34,7 @@ export async function loadSortConfig(): Promise<SortConfig | null> {
  * SortConfigをplugin-storeに保存する。
  */
 export async function saveSortConfig(config: SortConfig): Promise<void> {
-  const store = await load(STORE_FILE, { autoSave: false });
+  const store = await load(STORE_FILE, { defaults: {}, autoSave: false });
   await store.set(SORT_KEY, config);
   await store.save();
 }
