@@ -31,7 +31,8 @@ vi.mock('sonner', () => ({
 vi.mock('@dnd-kit/core', () => ({
   DndContext: ({ children }: { children: React.ReactNode }) => children,
   DragOverlay: ({ children }: { children: React.ReactNode }) => children,
-  closestCorners: vi.fn(),
+  pointerWithin: vi.fn(() => []),
+  rectIntersection: vi.fn(() => []),
   PointerSensor: vi.fn(),
   useSensor: vi.fn(() => ({})),
   useSensors: vi.fn(() => []),
