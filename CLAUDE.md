@@ -15,15 +15,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Desktop shell | Tauri | 2.10.x |
-| Frontend | React | 18.3.x |
-| Language | TypeScript | 5.7.x |
+| Frontend | React | 19.x |
+| Language | TypeScript | 6.0.x |
 | Build | Vite | 8.0.x (Rolldown) |
 | State | Zustand | 5.0.x |
 | DnD | @dnd-kit/core + sortable | 6.3.1 / 10.0.0 |
 | Styling | CSS Modules | built-in |
 | Toast | sonner | 2.x |
 | Test | Vitest + RTL | 4.1.x / 16.x |
-| Lint | ESLint 9 + Prettier 3 | flat config |
+| Lint | (未導入) | — |
 
 **Tauri plugins:** `plugin-http` (CORS-free API calls), `plugin-store` (persistent settings), `plugin-opener` (open URLs in browser)
 
@@ -67,10 +67,6 @@ npm run build              # Production build
 npx vitest                 # Watch mode
 npx vitest run             # Single run
 npx vitest run src/path    # Single file
-
-# Lint
-npx eslint .
-npx prettier --check .
 
 # Tauri
 npm run tauri build        # Production binary
