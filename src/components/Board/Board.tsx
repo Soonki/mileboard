@@ -2,12 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   DragOverlay,
-  closestCorners,
+  pointerWithin,
+  rectIntersection,
   PointerSensor,
   useSensor,
   useSensors,
 } from '@dnd-kit/core';
-import type { DragStartEvent, DragEndEvent, DragOverEvent } from '@dnd-kit/core';
+import type {
+  DragStartEvent,
+  DragEndEvent,
+  DragOverEvent,
+  CollisionDetection,
+} from '@dnd-kit/core';
 import { Toaster } from 'sonner';
 import { useBoardStore, findIssueInBoardData } from '../../stores/boardStore';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -56,6 +62,19 @@ function resolveOverLaneId(
     return overStr;
   return findLaneContaining(data, overId);
 }
+
+/**
+ * Custom collision detection for kanban board.
+ * pointerWithin for accurate lane boundary detection,
+ * rectIntersection fallback when pointer is in the gap between lanes.
+ */
+const kanbanCollisionDetection: CollisionDetection = (args) => {
+  const pointerCollisions = pointerWithin(args);
+  if (pointerCollisions.length > 0) {
+    return pointerCollisions;
+  }
+  return rectIntersection(args);
+};
 
 export function Board() {
   const [activeIssue, setActiveIssue] = useState<BacklogIssue | null>(null);
@@ -203,7 +222,7 @@ export function Board() {
     return (
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={kanbanCollisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
