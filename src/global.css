@@ -69,6 +69,18 @@
   --color-checkbox-checked: #2563EB;
   --color-dropdown-hover: #F3F4F6;
   --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12), 0 1px 4px rgba(0, 0, 0, 0.08);
+
+  /* Phase 9: Grouping */
+  --stack-bottom-clearance: 8px;
+  --badge-size:             20px;
+  --color-stack-layer:      rgba(255, 255, 255, 0.75);
+  --color-stack-shadow:     rgba(0, 0, 0, 0.12);
+  --color-badge-bg:         var(--color-accent);
+  --color-badge-text:       #FFFFFF;
+  --color-card-drop-ring:   rgba(37, 99, 235, 0.5);
+  --color-popover-backdrop: rgba(0, 0, 0, 0.04);
+  --shadow-popover:         0 8px 24px rgba(0, 0, 0, 0.14), 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-stack-layer:     0 2px 6px rgba(0, 0, 0, 0.10);
 }
 
 body {

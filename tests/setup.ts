@@ -24,6 +24,8 @@ vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
     success: vi.fn(),
+    loading: vi.fn(() => 'mock-toast-id'),
+    dismiss: vi.fn(),
   },
   Toaster: () => null,
 }));
@@ -39,6 +41,14 @@ vi.mock('@dnd-kit/core', () => ({
   useDroppable: vi.fn(() => ({
     setNodeRef: vi.fn(),
     isOver: false,
+  })),
+  // Phase 9: R6 PoC (GroupPopover.dnd.test.tsx) uses useDraggable
+  useDraggable: vi.fn(() => ({
+    attributes: {},
+    listeners: {},
+    setNodeRef: vi.fn(),
+    transform: null,
+    isDragging: false,
   })),
 }));
 
