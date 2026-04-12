@@ -86,3 +86,12 @@
 .cardDragDisabled {
   cursor: not-allowed;
 }
+
+/* Phase 9 (D-01, D-02): drop ring shown when another card is being dragged
+ * over this card. The outline-offset of -2px keeps the indicator inside the
+ * card so it doesn't disturb sibling layout. */
+.dropTargetCard {
+  outline: 2px solid var(--color-card-drop-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius-input);
+}

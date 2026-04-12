@@ -1,5 +1,6 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useSortable } from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
 import type { BacklogIssue } from '../../types/backlog';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -40,6 +41,20 @@ export function IssueCard({ issue, laneId, milestonePrefix }: IssueCardProps) {
     disabled: isMultiMilestone || isSortActive,
   });
 
+  // Phase 9 (D-01, D-02): card-to-card drop target enables creating a group by
+  // dropping one card onto another. Multi-milestone cards cannot be drop targets
+  // (D-16, Q4 — they cannot be group members), and a card being dragged should
+  // not be its own drop target (would create self-self drop).
+  const droppable = useDroppable({
+    id: `card-target-${issue.id}`,
+    disabled: isDragging || isMultiMilestone,
+  });
+
+  const setRefs = (el: HTMLElement | null): void => {
+    setNodeRef(el);
+    droppable.setNodeRef(el);
+  };
+
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
@@ -59,11 +74,11 @@ export function IssueCard({ issue, laneId, milestonePrefix }: IssueCardProps) {
 
   return (
     <div
-      ref={setNodeRef}
+      ref={setRefs}
       style={style}
       {...attributes}
       {...listeners}
-      className={`${styles.card} ${isDragging ? styles.cardDragging : ''} ${isMultiMilestone || isSortActive ? styles.cardDragDisabled : ''}`}
+      className={`${styles.card} ${isDragging ? styles.cardDragging : ''} ${isMultiMilestone || isSortActive ? styles.cardDragDisabled : ''} ${droppable.isOver ? styles.dropTargetCard : ''}`}
       onClick={handleClick}
       role="link"
       aria-label={`${issue.issueKey}をBacklogで開く`}
