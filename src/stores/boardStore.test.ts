@@ -9,9 +9,13 @@ vi.mock('./settingsStore');
 vi.mock('../utils/bulkMoveUtils', () => ({
   bulkMoveIssues: vi.fn(),
 }));
+vi.mock('../utils/groupUtils', () => ({
+  pruneStaleMembers: vi.fn((groups: unknown) => groups),
+}));
 vi.mock('./groupStore', () => {
   const mockMoveGroup = vi.fn();
   const mockRemoveMember = vi.fn();
+  const mockSetGroups = vi.fn();
   const mockGroups: Record<string, Group> = {};
   return {
     useGroupStore: {
@@ -19,11 +23,13 @@ vi.mock('./groupStore', () => {
         groups: mockGroups,
         moveGroup: mockMoveGroup,
         removeMember: mockRemoveMember,
+        setGroups: mockSetGroups,
       }),
     },
     __mockGroups: mockGroups,
     __mockMoveGroup: mockMoveGroup,
     __mockRemoveMember: mockRemoveMember,
+    __mockSetGroups: mockSetGroups,
   };
 });
 
@@ -36,6 +42,7 @@ import {
 import { fetchBoardData, updateIssueMilestone } from '../services/tauriBridge';
 import { useSettingsStore } from './settingsStore';
 import { bulkMoveIssues } from '../utils/bulkMoveUtils';
+import { pruneStaleMembers } from '../utils/groupUtils';
 import * as groupStoreModule from './groupStore';
 
 const mockFetchBoardData = vi.mocked(fetchBoardData);
@@ -45,16 +52,19 @@ const mockToastError = vi.mocked(toast.error);
 const mockToastLoading = vi.mocked(toast.loading);
 const mockToastSuccess = vi.mocked(toast.success);
 const mockBulkMoveIssues = vi.mocked(bulkMoveIssues);
+const mockPruneStaleMembers = vi.mocked(pruneStaleMembers);
 
 // Access internal mocks via the mocked module (they are exported alongside useGroupStore)
 const mockedGroupModule = groupStoreModule as unknown as {
   __mockGroups: Record<string, Group>;
   __mockMoveGroup: ReturnType<typeof vi.fn>;
   __mockRemoveMember: ReturnType<typeof vi.fn>;
+  __mockSetGroups: ReturnType<typeof vi.fn>;
 };
 const mockGroups = mockedGroupModule.__mockGroups;
 const mockMoveGroup = mockedGroupModule.__mockMoveGroup;
 const mockRemoveMember = mockedGroupModule.__mockRemoveMember;
+const mockSetGroups = mockedGroupModule.__mockSetGroups;
 
 // --- Test data factories ---
 
@@ -333,6 +343,65 @@ describe('boardStore', () => {
     const state = useBoardStore.getState();
     expect(state.status).toBe('error');
     expect(state.error).toBe('データの取得に失敗しました');
+  });
+
+  // --- Phase 9 Plan 04: fetchBoard pruneStaleMembers integration (Q3) ---
+
+  describe('fetchBoard pruneStaleMembers integration (Q3)', () => {
+    beforeEach(() => {
+      mockSetGroups.mockClear();
+      mockPruneStaleMembers.mockClear();
+      // Reset shared mockGroups
+      for (const k of Object.keys(mockGroups)) delete mockGroups[k];
+    });
+
+    it('calls pruneStaleMembers with current groups and all issues after fetch', async () => {
+      const sampleGroup: Group = {
+        id: 'group:abc',
+        memberIds: [100],
+        laneId: 'milestone-1',
+      };
+      mockGroups['group:abc'] = sampleGroup;
+      mockFetchBoardData.mockResolvedValue(mockBoardData);
+      // Default impl returns the same reference -> no setGroups call
+      mockPruneStaleMembers.mockImplementation((groups) => groups);
+
+      await useBoardStore.getState().fetchBoard();
+
+      expect(mockPruneStaleMembers).toHaveBeenCalledTimes(1);
+      const [calledGroups, calledIssues] =
+        mockPruneStaleMembers.mock.calls[0];
+      expect(calledGroups).toBe(mockGroups);
+      // calledIssues should contain all issues from mockBoardData
+      expect(Array.isArray(calledIssues)).toBe(true);
+      expect((calledIssues as unknown[]).length).toBeGreaterThan(0);
+    });
+
+    it('does NOT call setGroups when pruneStaleMembers returns the same reference', async () => {
+      mockFetchBoardData.mockResolvedValue(mockBoardData);
+      mockPruneStaleMembers.mockImplementation((groups) => groups);
+
+      await useBoardStore.getState().fetchBoard();
+
+      expect(mockSetGroups).not.toHaveBeenCalled();
+    });
+
+    it('calls setGroups when pruneStaleMembers returns a new GroupMap (stale members removed)', async () => {
+      const prunedResult = {
+        'group:pruned': {
+          id: 'group:pruned' as `group:${string}`,
+          memberIds: [1, 2],
+          laneId: 'milestone-1',
+        },
+      };
+      mockFetchBoardData.mockResolvedValue(mockBoardData);
+      mockPruneStaleMembers.mockReturnValue(prunedResult);
+
+      await useBoardStore.getState().fetchBoard();
+
+      expect(mockSetGroups).toHaveBeenCalledTimes(1);
+      expect(mockSetGroups).toHaveBeenCalledWith(prunedResult);
+    });
   });
 });
 

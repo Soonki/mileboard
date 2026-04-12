@@ -297,6 +297,47 @@ describe('groupStore.reset', () => {
   });
 });
 
+describe('groupStore.setGroups', () => {
+  it('replaces the entire groups map with the provided GroupMap', () => {
+    const allIssues = [makeIssue(1, 1), makeIssue(2, 2)];
+    const id = useGroupStore
+      .getState()
+      .createGroup([1, 2], 'lane-1', allIssues);
+    if (!id) throw new Error('createGroup failed');
+
+    const replacement: GroupMap = {
+      'group:replacement': {
+        id: 'group:replacement',
+        memberIds: [10, 20],
+        laneId: 'lane-2',
+      },
+    };
+    useGroupStore.getState().setGroups(replacement);
+
+    const state = useGroupStore.getState();
+    expect(state.groups).toBe(replacement);
+    expect(state.groups[id]).toBeUndefined();
+    expect(state.groups['group:replacement']).toEqual({
+      id: 'group:replacement',
+      memberIds: [10, 20],
+      laneId: 'lane-2',
+    });
+  });
+
+  it('persists via saveGroupConfig (fire-and-forget)', () => {
+    vi.mocked(saveGroupConfig).mockClear();
+    const replacement: GroupMap = {
+      'group:fire-and-forget': {
+        id: 'group:fire-and-forget',
+        memberIds: [1, 2],
+        laneId: 'lane-3',
+      },
+    };
+    useGroupStore.getState().setGroups(replacement);
+    expect(saveGroupConfig).toHaveBeenCalledWith(replacement);
+  });
+});
+
 describe('groupStore immutability', () => {
   it('produces a new groups object reference on createGroup', () => {
     const allIssues = [makeIssue(1, 1), makeIssue(2, 2)];

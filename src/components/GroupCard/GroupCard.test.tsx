@@ -189,14 +189,25 @@ describe('GroupCard', () => {
     expect(screen.getByRole('button')).toHaveAttribute('aria-expanded', 'false');
   });
 
-  it('onExpand callback fires with groupId on click', async () => {
+  it('onExpand callback fires with groupId and DOMRect on click (Plan 04)', async () => {
     const onExpand = vi.fn();
     const rep = createMockIssue({ id: 1, keyId: 1, issueKey: 'TEST-1' });
     const slot = makeSlot(3, 3, rep, 'group:click-test');
     const user = userEvent.setup();
     render(<GroupCard slot={slot} onExpand={onExpand} {...defaultProps} />);
     await user.click(screen.getByRole('button'));
-    expect(onExpand).toHaveBeenCalledWith('group:click-test');
+    // Plan 04: signature is (groupId, rect) — second arg is a DOMRect (or fallback DOMRect)
+    expect(onExpand).toHaveBeenCalledTimes(1);
+    expect(onExpand).toHaveBeenCalledWith(
+      'group:click-test',
+      expect.any(Object),
+    );
+    // The second argument should look like a DOMRect (have top/left/right/bottom)
+    const rectArg = onExpand.mock.calls[0][1];
+    expect(typeof rectArg.top).toBe('number');
+    expect(typeof rectArg.left).toBe('number');
+    expect(typeof rectArg.right).toBe('number');
+    expect(typeof rectArg.bottom).toBe('number');
   });
 
   it('onExpand does NOT fire when useSortable.isDragging is true', async () => {

@@ -7,6 +7,7 @@ import type { BacklogIssue } from '../../types/backlog';
 
 const mockFetchBoard = vi.fn();
 const mockMoveIssue = vi.fn();
+const mockBulkMoveGroup = vi.fn();
 
 let mockStoreState: Record<string, unknown> = {};
 
@@ -23,8 +24,16 @@ let mockFilterState: MockFilterState = {
 };
 
 vi.mock('../../stores/boardStore', () => ({
-  useBoardStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector(mockStoreState),
+  useBoardStore: Object.assign(
+    (selector: (s: Record<string, unknown>) => unknown) =>
+      selector(mockStoreState),
+    {
+      getState: () => ({
+        ...mockStoreState,
+        bulkMoveGroup: mockBulkMoveGroup,
+      }),
+    },
+  ),
   findIssueInBoardData: vi.fn(() => null),
 }));
 
@@ -91,6 +100,8 @@ const mockGroupStoreState = {
   createGroup: vi.fn<CreateGroupFn>(() => null),
   addMember: vi.fn(),
   moveGroup: vi.fn(),
+  removeMember: vi.fn(),
+  setGroups: vi.fn(),
   loadFromStorage: vi.fn(),
 };
 vi.mock('../../stores/groupStore', () => ({
@@ -146,6 +157,23 @@ vi.mock('../BoardError/BoardError', () => ({
 
 vi.mock('../DragOverlayCard/DragOverlayCard', () => ({
   DragOverlayCard: () => <div data-testid="drag-overlay-card" />,
+}));
+
+// Phase 9 Plan 04: GroupPopover mock — keeps Board tests focused on integration logic.
+vi.mock('../GroupPopover/GroupPopover', () => ({
+  GroupPopover: ({
+    slot,
+  }: {
+    slot: { group: { id: string }; totalMembers: number };
+  }) => (
+    <div
+      data-testid="group-popover"
+      data-group-id={slot.group.id}
+      data-total-members={slot.totalMembers}
+    >
+      popover
+    </div>
+  ),
 }));
 
 const mockBoardData: BoardData = {
@@ -568,6 +596,128 @@ describe('Board', () => {
         // No grouping should occur for lane drops
         expect(mockGroupStoreState.createGroup).not.toHaveBeenCalled();
         expect(mockGroupStoreState.addMember).not.toHaveBeenCalled();
+      });
+
+      // --- Plan 04: group→lane bulk move + popover member drag-out ---
+
+      it('group→lane branch: drops a group on a different lane and calls bulkMoveGroup', () => {
+        mockGroupStoreState.groups = {
+          'group:bulk-1': {
+            id: 'group:bulk-1',
+            memberIds: [99, 100],
+            laneId: 'milestone-1',
+          },
+        };
+        mockBulkMoveGroup.mockClear();
+
+        const params = makeParams();
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 'group:bulk-1' },
+          over: { id: 'unassigned' },
+        } as unknown as Parameters<typeof handler>[0]);
+
+        expect(mockBulkMoveGroup).toHaveBeenCalledWith(
+          'group:bulk-1',
+          'milestone-1',
+          'unassigned',
+        );
+        mockGroupStoreState.groups = {};
+      });
+
+      it('group→lane branch: does NOT bulk move when target lane equals group.laneId', () => {
+        mockGroupStoreState.groups = {
+          'group:same-lane': {
+            id: 'group:same-lane',
+            memberIds: [99, 100],
+            laneId: 'milestone-1',
+          },
+        };
+        mockBulkMoveGroup.mockClear();
+
+        const params = makeParams();
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 'group:same-lane' },
+          over: { id: 'milestone-1' },
+        } as unknown as Parameters<typeof handler>[0]);
+
+        expect(mockBulkMoveGroup).not.toHaveBeenCalled();
+        mockGroupStoreState.groups = {};
+      });
+
+      it('popover member drag-out: removes member from group and moves issue to new lane', () => {
+        mockGroupStoreState.groups = {
+          'group:dragout': {
+            id: 'group:dragout',
+            memberIds: [99, 100, 200],
+            laneId: 'milestone-1',
+          },
+        };
+        mockGroupStoreState.removeMember.mockClear();
+        const moveIssueSpy = vi.fn();
+        const updateOnCrossLaneMoveSpy = vi.fn();
+
+        const params = {
+          ...makeParams(),
+          moveIssue: moveIssueSpy,
+          updateOnCrossLaneMove: updateOnCrossLaneMoveSpy,
+        };
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 99 },
+          over: { id: 'unassigned' },
+        } as unknown as Parameters<typeof handler>[0]);
+
+        expect(mockGroupStoreState.removeMember).toHaveBeenCalledWith(
+          'group:dragout',
+          99,
+        );
+        expect(moveIssueSpy).toHaveBeenCalledWith(
+          99,
+          'milestone-1',
+          'unassigned',
+        );
+        expect(updateOnCrossLaneMoveSpy).toHaveBeenCalledWith(
+          99,
+          'milestone-1',
+          'unassigned',
+        );
+        mockGroupStoreState.groups = {};
+      });
+
+      it('non-grouped issue cross-lane move falls through to existing moveIssue (regression)', () => {
+        // No groups configured -- containingGroup will be undefined.
+        mockGroupStoreState.groups = {};
+        const moveIssueSpy = vi.fn();
+        const params = { ...makeParams(), moveIssue: moveIssueSpy };
+        const handler = buildHandleDragEnd(params);
+
+        // For this regression test, we need findIssueInBoardData to return non-null
+        // (already configured above) and the dataWithBothIssues to have issue 99
+        // in milestone-1 — this triggers the lane-drop fallback, not popover dragout.
+        handler({
+          active: { id: 99 },
+          over: { id: 'unassigned' },
+        } as unknown as Parameters<typeof handler>[0]);
+
+        expect(mockGroupStoreState.removeMember).not.toHaveBeenCalled();
+        // moveIssue from existing lane fallback should run
+        expect(moveIssueSpy).toHaveBeenCalled();
+      });
+    });
+
+    // --- Plan 04: GroupPopover render integration ---
+
+    describe('GroupPopover render integration', () => {
+      it('does NOT render GroupPopover when expandedGroupId is null (initial state)', () => {
+        mockStoreState = {
+          ...mockStoreState,
+          status: 'loaded',
+          data: mockBoardData,
+        };
+        render(<Board />);
+        expect(screen.queryByTestId('group-popover')).toBeNull();
       });
     });
   });
