@@ -2,8 +2,11 @@ import { create } from 'zustand';
 import { toast } from 'sonner';
 import type { BoardData } from '../types/board';
 import type { BacklogIssue } from '../types/backlog';
+import type { GroupId } from '../types/group';
 import { fetchBoardData, updateIssueMilestone } from '../services/tauriBridge';
 import { useSettingsStore } from './settingsStore';
+import { useGroupStore } from './groupStore';
+import { bulkMoveIssues } from '../utils/bulkMoveUtils';
 
 type BoardStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -15,6 +18,22 @@ interface BoardStoreState {
 
   fetchBoard: () => Promise<void>;
   moveIssue: (issueId: number, fromLaneId: string, toLaneId: string) => void;
+  /**
+   * グループの全メンバーを 1 つの toLane へ一括移動する（GRP-04, GRP-07）。
+   *
+   * - 楽観的更新: 全メンバーを即時 toLane へ移動（D-20）
+   * - 進捗 toast: sonner.loading で N件を移動中... → M/N 完了... → success/error
+   *   （D-18, 同一 toastId で in-place 更新）
+   * - 部分失敗: 失敗メンバーのみ fromLane へ rollback + groupStore.removeMember
+   *   で外す（D-19）
+   * - 全失敗: 全メンバーを snapshot へ rollback + groupStore.moveGroup を逆方向
+   *   で巻き戻し
+   */
+  bulkMoveGroup: (
+    groupId: GroupId,
+    fromLaneId: string,
+    toLaneId: string,
+  ) => Promise<void>;
   reset: () => void;
 }
 
@@ -170,6 +189,94 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
           : 'マイルストーンの変更に失敗しました';
       toast.error(message);
     });
+  },
+
+  bulkMoveGroup: async (groupId, fromLaneId, toLaneId) => {
+    // 1. Snapshot guard
+    const snapshot = get().data;
+    if (!snapshot) return;
+
+    // 2. Group guard
+    const group = useGroupStore.getState().groups[groupId];
+    if (!group) return;
+
+    // 3. Resolve member issues from snapshot (filter out missing)
+    const memberIssues = group.memberIds
+      .map((id) => findIssueInBoardData(snapshot, id))
+      .filter((i): i is BacklogIssue => i !== null);
+
+    if (memberIssues.length === 0) return;
+
+    // 4. Optimistic UI update -- move all members to toLane (D-20)
+    let optimisticData: BoardData = snapshot;
+    for (const issue of memberIssues) {
+      optimisticData = applyMoveIssue(
+        optimisticData,
+        issue.id,
+        fromLaneId,
+        toLaneId,
+      );
+    }
+    set({ data: optimisticData });
+
+    // 5. groupStore laneId update (immediate, before API)
+    useGroupStore.getState().moveGroup(groupId, toLaneId);
+
+    // 6. Initial progress toast (D-18 wording)
+    const toastId = toast.loading(`${memberIssues.length}件を移動中...`);
+
+    const { settings } = useSettingsStore.getState();
+
+    // 7. Bulk API call (Task 1 -- bulkMoveIssues handles 3-parallel + rate limit)
+    const result = await bulkMoveIssues({
+      members: memberIssues,
+      toLaneId,
+      hostUrl: settings.hostUrl,
+      apiKey: settings.apiKey,
+      milestonePrefix: settings.milestonePrefix,
+      onProgress: (completed, total) => {
+        // Skip the final 100% update -- success/error replaces the toast
+        if (completed < total) {
+          toast.loading(`${completed}/${total} 完了...`, { id: toastId });
+        }
+      },
+    });
+
+    // 8. Branch on result (D-18 / D-19)
+    if (result.failed.length === 0) {
+      // All success
+      toast.success(`${result.succeeded.length}件を移動しました`, {
+        id: toastId,
+      });
+      return;
+    }
+
+    if (result.succeeded.length === 0) {
+      // All failure: full rollback to snapshot
+      set({ data: snapshot });
+      useGroupStore.getState().moveGroup(groupId, fromLaneId);
+      toast.error('移動に失敗しました。再度お試しください', { id: toastId });
+      return;
+    }
+
+    // Partial failure: rollback only failed members (D-19)
+    let rollbackData = get().data;
+    if (!rollbackData) return;
+    for (const { issue } of result.failed) {
+      rollbackData = applyMoveIssue(rollbackData, issue.id, toLaneId, fromLaneId);
+    }
+    set({ data: rollbackData });
+
+    // Remove failed members from the group (they become standalone cards in fromLane)
+    for (const { issue } of result.failed) {
+      useGroupStore.getState().removeMember(groupId, issue.id);
+    }
+
+    // D-18: partial failure also uses toast.error (no toast.warning)
+    toast.error(
+      `${memberIssues.length}件中${result.failed.length}件の移動に失敗しました`,
+      { id: toastId },
+    );
   },
 
   reset: () => {
