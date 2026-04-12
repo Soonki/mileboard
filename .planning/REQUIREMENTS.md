@@ -28,11 +28,15 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 - [x] **REORD-02**: カスタム並び順がアプリ再起動後も保持される（plugin-store）
 - [ ] **REORD-03**: ソートモード中は手動並べ替えが無効になり、モード表示される
 
-### 複数選択・一括移動
+### グルーピング・一括移動
 
-- [ ] **BULK-01**: Ctrl+クリックで個別カード選択、Shift+クリックで範囲選択できる
-- [ ] **BULK-02**: 選択した複数カードをDnDでまとめて別レーンに移動できる
-- [ ] **BULK-03**: 一括移動中に進捗が表示され、部分失敗時は個別ロールバック+resyncされる
+- [ ] **GRP-01**: 複数カードを選択してグループ化できる（付箋を重ねるようなスタック表現）
+- [ ] **GRP-02**: レーン内ではグループの代表カード1枚のみ表示され、重なりでグループであることが視覚的にわかる
+- [ ] **GRP-03**: グループをクリックすると展開され、含まれる課題一覧を閲覧できる
+- [ ] **GRP-04**: グループをDnDで別レーンに移動すると、含まれる全課題が一括移動される
+- [ ] **GRP-05**: 1レーン内に複数のグループを作成できる
+- [ ] **GRP-06**: グループの解除（個別カードに戻す）ができる
+- [ ] **GRP-07**: 一括移動中に進捗が表示され、部分失敗時は個別ロールバック+resyncされる
 
 ## Future Requirements
 
@@ -66,13 +70,17 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 | REORD-01 | Phase 8 | Complete |
 | REORD-02 | Phase 8 | Complete |
 | REORD-03 | Phase 8 | Pending |
-| BULK-01 | Phase 9 | Pending |
-| BULK-02 | Phase 9 | Pending |
-| BULK-03 | Phase 9 | Pending |
+| GRP-01 | Phase 9 | Pending |
+| GRP-02 | Phase 9 | Pending |
+| GRP-03 | Phase 9 | Pending |
+| GRP-04 | Phase 9 | Pending |
+| GRP-05 | Phase 9 | Pending |
+| GRP-06 | Phase 9 | Pending |
+| GRP-07 | Phase 9 | Pending |
 
 **Coverage:**
-- v1.1 requirements: 15 total
-- Mapped to phases: 15
+- v1.1 requirements: 19 total
+- Mapped to phases: 19
 - Unmapped: 0
 
 ---
