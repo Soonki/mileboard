@@ -82,6 +82,27 @@ describe('reorderStore', () => {
       expect(useReorderStore.getState().orderMap).toEqual({});
       expect(saveReorderConfig).not.toHaveBeenCalled();
     });
+
+    // Phase 9 D-15: ReorderEntry で group:${id} を含む orderMap を正しく扱う
+    it('works when orderMap contains group:${id} entries alongside number activeId', () => {
+      useReorderStore.setState({
+        orderMap: { lane1: [1, 'group:abc', 2] },
+      });
+
+      useReorderStore.getState().reorder('lane1', 1, 2);
+
+      // findIndex ベースで 1 と 2 の位置を求め arrayMove した結果
+      // 元: [1, 'group:abc', 2]  -> fromIndex=0, toIndex=2
+      // arrayMove -> ['group:abc', 2, 1]
+      expect(useReorderStore.getState().orderMap.lane1).toEqual([
+        'group:abc',
+        2,
+        1,
+      ]);
+      expect(saveReorderConfig).toHaveBeenCalledWith({
+        lane1: ['group:abc', 2, 1],
+      });
+    });
   });
 
   describe('setLaneOrder', () => {
@@ -162,6 +183,23 @@ describe('reorderStore', () => {
       expect(useReorderStore.getState().orderMap).toEqual({
         lane1: [],
         lane2: [4, 5, 2],
+      });
+    });
+
+    // Phase 9 D-15: group:${id} エントリを含む orderMap から number issueId のみを削除する
+    it('removes only the number issueId, preserving group:${id} entries in fromLane', () => {
+      useReorderStore.setState({
+        orderMap: {
+          lane1: [1, 'group:abc', 2, 'group:def'],
+          lane2: ['group:xyz', 4],
+        },
+      });
+
+      useReorderStore.getState().updateOnCrossLaneMove(2, 'lane1', 'lane2');
+
+      expect(useReorderStore.getState().orderMap).toEqual({
+        lane1: [1, 'group:abc', 'group:def'],
+        lane2: ['group:xyz', 4, 2],
       });
     });
   });

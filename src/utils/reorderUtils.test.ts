@@ -86,4 +86,19 @@ describe('applyCustomOrder', () => {
     // All savedIds are deleted, so all issues are "new" -> keyId ascending
     expect(result.map((i) => i.keyId)).toEqual([10, 20]);
   });
+
+  // Phase 9 D-15: group:${id} エントリを ReorderEntry として扱う
+  it('skips group:${id} entries and extracts only number entries from savedEntries', () => {
+    const issues = [makeIssue(1, 10), makeIssue(2, 20)];
+    const result = applyCustomOrder(issues, [1, 'group:abc', 2]);
+    // group:${id} は Wave 1 で展開されるため Wave 0 では skip される
+    expect(result.map((i) => i.id)).toEqual([1, 2]);
+  });
+
+  it('falls back to keyId ascending when all savedEntries are group:${id}', () => {
+    const issues = [makeIssue(3, 30), makeIssue(1, 10)];
+    const result = applyCustomOrder(issues, ['group:a', 'group:b']);
+    // number エントリが 0 件なので keyId 昇順で末尾に追加される挙動
+    expect(result.map((i) => i.keyId)).toEqual([10, 30]);
+  });
 });

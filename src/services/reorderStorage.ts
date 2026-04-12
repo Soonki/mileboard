@@ -16,11 +16,17 @@ export async function loadReorderConfig(): Promise<ReorderMap | null> {
     return null;
   }
 
-  // T-08-01: バリデーション -- 各値が number[] であることを確認
+  // T-09-00-01: バリデーション -- Phase 9 後方互換 -- number と group:${id} の両形式を accept
+  // 旧 Phase 8 形式 `{ laneId: [1,2,3] }` は新形式 `(number | string)[]` のサブセットなので
+  // 暗黙的に upgrade される（マイグレーションコード不要）
   for (const [, value] of Object.entries(data)) {
-    if (!Array.isArray(value) || !value.every((v) => typeof v === 'number')) {
-      return null;
-    }
+    if (!Array.isArray(value)) return null;
+    const allValid = value.every(
+      (v) =>
+        typeof v === 'number' ||
+        (typeof v === 'string' && v.startsWith('group:')),
+    );
+    if (!allValid) return null;
   }
 
   return data;

@@ -25,8 +25,9 @@ export const useReorderStore = create<ReorderStoreState>()((set, get) => ({
   reorder: (laneId, activeId, overId) => {
     const { orderMap } = get();
     const currentOrder = orderMap[laneId] ?? [];
-    const fromIndex = currentOrder.indexOf(activeId);
-    const toIndex = currentOrder.indexOf(overId);
+    // Phase 9: ReorderEntry (number | `group:${id}`) を扱うため indexOf -> findIndex
+    const fromIndex = currentOrder.findIndex((entry) => entry === activeId);
+    const toIndex = currentOrder.findIndex((entry) => entry === overId);
     if (fromIndex === -1 || toIndex === -1) return;
     const newOrder = arrayMove(currentOrder, fromIndex, toIndex);
     const newMap = { ...orderMap, [laneId]: newOrder };
@@ -50,8 +51,9 @@ export const useReorderStore = create<ReorderStoreState>()((set, get) => ({
 
   updateOnCrossLaneMove: (issueId, fromLaneId, toLaneId) => {
     const { orderMap } = get();
+    // Phase 9: ReorderEntry ベースの filter。group:${id} エントリは維持される
     const fromOrder = (orderMap[fromLaneId] ?? []).filter(
-      (id) => id !== issueId,
+      (entry) => entry !== issueId,
     );
     const toOrder = [...(orderMap[toLaneId] ?? []), issueId];
     const newMap = {
