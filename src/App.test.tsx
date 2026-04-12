@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
 import App from './App';
 import { useSettingsStore } from './stores/settingsStore';
+import { useGroupStore } from './stores/groupStore';
 
 // Mock the child components to isolate App routing logic
 vi.mock('./components/SettingsCard/SettingsCard', () => ({
@@ -76,6 +77,15 @@ describe('App', () => {
     render(<App />);
 
     expect(loadFromStorage).toHaveBeenCalled();
+  });
+
+  it('calls useGroupStore.loadFromStorage on mount (Phase 9 D-11)', () => {
+    const loadGroupsFromStorage = vi.fn();
+    useGroupStore.setState({ loadFromStorage: loadGroupsFromStorage });
+
+    render(<App />);
+
+    expect(loadGroupsFromStorage).toHaveBeenCalled();
   });
 
   it('renders SettingsModal when gear icon is clicked', () => {

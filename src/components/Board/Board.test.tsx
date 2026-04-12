@@ -81,9 +81,14 @@ vi.mock('../../utils/reorderUtils', () => ({
 }));
 
 // Phase 9: groupStore + groupUtils mocks
+type CreateGroupFn = (
+  ids: [number, number],
+  laneId: string,
+  allIssues: unknown,
+) => `group:${string}` | null;
 const mockGroupStoreState = {
   groups: {} as Record<string, unknown>,
-  createGroup: vi.fn(() => null),
+  createGroup: vi.fn<CreateGroupFn>(() => null),
   addMember: vi.fn(),
   moveGroup: vi.fn(),
   loadFromStorage: vi.fn(),
@@ -425,6 +430,19 @@ describe('Board', () => {
         mockGroupStoreState.createGroup.mockReset();
         mockGroupStoreState.addMember.mockReset();
         mockReorderState.setLaneOrder.mockClear();
+        // findIssueInBoardData は default で null を返すモックなので、
+        // buildHandleDragEnd テスト用に id ベースで実 issue を返すよう差し替える
+        const { findIssueInBoardData } = await import('../../stores/boardStore');
+        vi.mocked(findIssueInBoardData).mockImplementation((data, id) => {
+          for (const mwi of data.milestones) {
+            const found = mwi.issues.find((i) => i.id === id);
+            if (found) return found;
+          }
+          for (const i of data.unassignedIssues) {
+            if (i.id === id) return i;
+          }
+          return null;
+        });
       });
 
       const sourceIssue: BacklogIssue = {
