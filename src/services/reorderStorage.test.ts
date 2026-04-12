@@ -51,6 +51,45 @@ describe('loadReorderConfig', () => {
     const result = await loadReorderConfig();
     expect(result).toBeNull();
   });
+
+  // Phase 9: 後方互換 (T-09-00-02) + 新形式 (T-09-00-01)
+  it('returns ReorderMap for Phase 8 legacy format { lane1: [1, 2, 3] } (backward compat)', async () => {
+    const legacyData = { lane1: [1, 2, 3] };
+    mockStore.get.mockResolvedValue(legacyData);
+
+    const result = await loadReorderConfig();
+    expect(result).toEqual(legacyData);
+  });
+
+  it('returns ReorderMap for Phase 9 new format { lane1: [1, "group:abc", 2] }', async () => {
+    const newData = { lane1: [1, 'group:abc', 2] };
+    mockStore.get.mockResolvedValue(newData);
+
+    const result = await loadReorderConfig();
+    expect(result).toEqual(newData);
+  });
+
+  it('returns null when array contains invalid string without group: prefix', async () => {
+    mockStore.get.mockResolvedValue({ lane1: ['invalid-prefix', 1] });
+
+    const result = await loadReorderConfig();
+    expect(result).toBeNull();
+  });
+
+  it('returns null when array contains boolean value', async () => {
+    mockStore.get.mockResolvedValue({ lane1: [true, 1] });
+
+    const result = await loadReorderConfig();
+    expect(result).toBeNull();
+  });
+
+  it('accepts strings that start with "group:" prefix', async () => {
+    const data = { lane1: ['group:1712930400000-a1b2c3', 'group:abc', 42] };
+    mockStore.get.mockResolvedValue(data);
+
+    const result = await loadReorderConfig();
+    expect(result).toEqual(data);
+  });
 });
 
 describe('saveReorderConfig', () => {
