@@ -1,0 +1,130 @@
+.groupSlot {
+  position: relative;
+  padding-bottom: var(--stack-bottom-clearance);
+  margin: 0 var(--space-sm) var(--space-sm);
+  cursor: pointer;
+}
+
+.groupSlot:first-child {
+  margin-top: var(--space-sm);
+}
+
+.shadowLayer1,
+.shadowLayer2 {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: var(--stack-bottom-clearance);
+  background: var(--color-stack-layer);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-stack-layer);
+  pointer-events: none;
+}
+
+.shadowLayer1 {
+  transform: translate(3px, 3px);
+  opacity: 0.85;
+  z-index: 0;
+}
+
+.shadowLayer2 {
+  transform: translate(6px, 6px);
+  opacity: 0.65;
+  z-index: -1;
+}
+
+.representativeCard {
+  position: relative;
+  z-index: 1;
+  padding: var(--space-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  overflow: hidden;
+  transition: background-color var(--transition-fast);
+}
+
+.representativeCard:hover {
+  background-color: #ECEEF0;
+}
+
+.line1 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-xs);
+}
+
+.issueKey {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.summary {
+  font-size: var(--font-size-body);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: var(--space-xs);
+}
+
+.line3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.assignee {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-text-secondary);
+}
+
+.noAssignee {
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-regular);
+  color: var(--color-disabled);
+}
+
+.countBadge {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: var(--badge-size);
+  height: var(--badge-size);
+  border-radius: 50%;
+  background: var(--color-badge-bg);
+  color: var(--color-badge-text);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--color-surface);
+  z-index: 2;
+}
+
+.countBadgePill {
+  width: auto;
+  min-width: var(--badge-size);
+  padding: 0 4px;
+  border-radius: var(--radius-input);
+}
+
+.cardDragging {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.dropTargetGroup {
+  outline: 2px solid var(--color-card-drop-ring);
+  outline-offset: -2px;
+  border-radius: var(--radius-card);
+}
