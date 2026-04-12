@@ -80,22 +80,48 @@ vi.mock('../../utils/reorderUtils', () => ({
   applyCustomOrder: vi.fn((issues: unknown[]) => issues),
 }));
 
+// Phase 9: groupStore + groupUtils mocks
+const mockGroupStoreState = {
+  groups: {} as Record<string, unknown>,
+  createGroup: vi.fn(() => null),
+  addMember: vi.fn(),
+  moveGroup: vi.fn(),
+  loadFromStorage: vi.fn(),
+};
+vi.mock('../../stores/groupStore', () => ({
+  useGroupStore: Object.assign(
+    (selector: (s: typeof mockGroupStoreState) => unknown) =>
+      selector(mockGroupStoreState),
+    {
+      getState: () => mockGroupStoreState,
+    },
+  ),
+}));
+
+vi.mock('../../utils/groupUtils', () => ({
+  applyGroupExpansion: vi.fn(
+    (filtered: unknown[]) => ({ items: filtered, hiddenGroupCount: 0 }),
+  ),
+  rejectMultiMilestoneMember: vi.fn(() => false),
+  pruneStaleMembers: vi.fn((g: unknown) => g),
+}));
+
 vi.mock('../Lane/Lane', () => ({
   Lane: ({
     name,
     laneId,
-    issues,
+    items,
     hiddenCount,
   }: {
     name: string;
     laneId: string;
-    issues: BacklogIssue[];
+    items: unknown[];
     hiddenCount?: number;
   }) => (
     <div
       data-testid={`lane-${name}`}
       data-lane-id={laneId}
-      data-issue-count={issues.length}
+      data-issue-count={items.length}
       data-hidden-count={hiddenCount ?? 0}
     >
       {name}
@@ -356,6 +382,175 @@ describe('Board', () => {
       mockSortState.field = 'assignee';
       render(<Board />);
       expect(applyCustomOrder).not.toHaveBeenCalled();
+    });
+  });
+
+  // Phase 9 (09-02): grouping integration
+  describe('Phase 9: grouping integration', () => {
+    it('calls applyGroupExpansion when board data is loaded', async () => {
+      const { applyGroupExpansion } = await import('../../utils/groupUtils');
+      vi.mocked(applyGroupExpansion).mockClear();
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: mockBoardData,
+      };
+      render(<Board />);
+      expect(applyGroupExpansion).toHaveBeenCalled();
+    });
+
+    it('passes items prop to Lane (renamed from issues)', () => {
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: mockBoardData,
+      };
+      render(<Board />);
+      const lane = screen.getByTestId('lane-Sprint 2504');
+      // The mock reads 'items' prop now and exposes data-issue-count
+      expect(lane).toHaveAttribute('data-issue-count', '0');
+    });
+
+    it('exports buildHandleDragEnd factory for tests', async () => {
+      const mod = await import('./Board');
+      expect(typeof mod.buildHandleDragEnd).toBe('function');
+    });
+
+    describe('buildHandleDragEnd (factory-tested logic)', () => {
+      let buildHandleDragEnd: typeof import('./Board').buildHandleDragEnd;
+
+      beforeEach(async () => {
+        const mod = await import('./Board');
+        buildHandleDragEnd = mod.buildHandleDragEnd;
+        mockGroupStoreState.createGroup.mockReset();
+        mockGroupStoreState.addMember.mockReset();
+        mockReorderState.setLaneOrder.mockClear();
+      });
+
+      const sourceIssue: BacklogIssue = {
+        id: 99,
+        projectId: 1,
+        issueKey: 'TEST-99',
+        keyId: 99,
+        summary: 'Source',
+        description: null,
+        status: { id: 1, projectId: 1, name: '未対応', color: '#000', displayOrder: 0 },
+        priority: { id: 3, name: '中' },
+        assignee: null,
+        milestone: [],
+        category: [],
+        startDate: null,
+        dueDate: null,
+        created: '2026-04-01T00:00:00Z',
+        updated: '2026-04-01T00:00:00Z',
+      };
+      const targetIssue: BacklogIssue = {
+        ...sourceIssue,
+        id: 100,
+        issueKey: 'TEST-100',
+        keyId: 100,
+        summary: 'Target',
+      };
+      const dataWithBothIssues: BoardData = {
+        unassignedIssues: [],
+        milestones: [
+          {
+            milestone: {
+              id: 1,
+              projectId: 1,
+              name: 'Sprint 2504',
+              description: '',
+              startDate: null,
+              releaseDueDate: null,
+              archived: false,
+              displayOrder: 0,
+            },
+            issues: [sourceIssue, targetIssue],
+          },
+        ],
+      };
+
+      function makeParams() {
+        return {
+          data: dataWithBothIssues,
+          orderMap: {} as Record<string, (number | `group:${string}`)[]>,
+          milestonePrefix: 'Sprint',
+          setActiveIssue: vi.fn(),
+          setOverLaneId: vi.fn(),
+          sortField: 'none',
+          moveIssue: vi.fn(),
+          reorder: vi.fn(),
+          updateOnCrossLaneMove: vi.fn(),
+          getLaneItems: () => [sourceIssue, targetIssue],
+        };
+      }
+
+      it('card-target-* branch calls useGroupStore.getState().createGroup', () => {
+        mockGroupStoreState.createGroup.mockReturnValue('group:created-id');
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'card-target-100' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.createGroup).toHaveBeenCalledWith(
+          [99, 100],
+          'milestone-1',
+          expect.any(Array),
+        );
+      });
+
+      it('group-target-* branch calls useGroupStore.getState().addMember', () => {
+        mockGroupStoreState.groups = {
+          'group:abc': { id: 'group:abc', memberIds: [200, 201], laneId: 'milestone-1' },
+        };
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'group-target-group:abc' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.addMember).toHaveBeenCalledWith(
+          'group:abc',
+          99,
+          expect.any(Array),
+        );
+        // Reset for other tests
+        mockGroupStoreState.groups = {};
+      });
+
+      it('card-target-* branch is blocked when source issue is multi-milestone', async () => {
+        const { rejectMultiMilestoneMember } = await import(
+          '../../utils/groupUtils'
+        );
+        vi.mocked(rejectMultiMilestoneMember).mockReturnValueOnce(true);
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'card-target-100' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.createGroup).not.toHaveBeenCalled();
+        vi.mocked(rejectMultiMilestoneMember).mockReturnValue(false);
+      });
+
+      it('self-drop on card-target-* is rejected (sourceId === targetId)', () => {
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'card-target-99' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.createGroup).not.toHaveBeenCalled();
+      });
+
+      it('lane drop fallback still works (existing reorder behavior)', () => {
+        const params = makeParams();
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 99 },
+          over: { id: 'milestone-1' },
+        } as unknown as Parameters<typeof handler>[0]);
+        // No grouping should occur for lane drops
+        expect(mockGroupStoreState.createGroup).not.toHaveBeenCalled();
+        expect(mockGroupStoreState.addMember).not.toHaveBeenCalled();
+      });
     });
   });
 });

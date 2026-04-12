@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { arrayMove } from '@dnd-kit/sortable';
-import type { ReorderMap } from '../types/reorder';
+import type { ReorderEntry, ReorderMap } from '../types/reorder';
 import {
   loadReorderConfig,
   saveReorderConfig,
@@ -9,7 +9,11 @@ import {
 interface ReorderStoreState {
   orderMap: ReorderMap;
   reorder: (laneId: string, activeId: number, overId: number) => void;
-  setLaneOrder: (laneId: string, issueIds: number[]) => void;
+  /**
+   * レーンの並び順を上書き設定する。Phase 9 で ReorderEntry[]
+   * （number | `group:${id}`）を受け取れるよう拡張。
+   */
+  setLaneOrder: (laneId: string, entries: ReorderEntry[]) => void;
   removeLaneOrder: (laneId: string) => void;
   updateOnCrossLaneMove: (
     issueId: number,
@@ -35,9 +39,9 @@ export const useReorderStore = create<ReorderStoreState>()((set, get) => ({
     saveReorderConfig(newMap).catch(() => {});
   },
 
-  setLaneOrder: (laneId, issueIds) => {
+  setLaneOrder: (laneId, entries) => {
     const { orderMap } = get();
-    const newMap = { ...orderMap, [laneId]: issueIds };
+    const newMap = { ...orderMap, [laneId]: entries };
     set({ orderMap: newMap });
     saveReorderConfig(newMap).catch(() => {});
   },
