@@ -6,6 +6,7 @@ import { IssueCard } from './IssueCard';
 import type { BacklogIssue } from '../../types/backlog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { useSortable } from '@dnd-kit/sortable';
+import { useDroppable } from '@dnd-kit/core';
 
 vi.mock('../../stores/sortStore', () => ({
   useSortStore: vi.fn((selector: (s: { field: string; direction: string }) => unknown) =>
@@ -70,6 +71,10 @@ describe('IssueCard', () => {
       transition: null,
       isDragging: false,
     } as unknown as ReturnType<typeof useSortable>);
+    vi.mocked(useDroppable).mockReturnValue({
+      setNodeRef: vi.fn(),
+      isOver: false,
+    } as unknown as ReturnType<typeof useDroppable>);
   });
 
   it('renders issue key', () => {
@@ -323,5 +328,79 @@ describe('IssueCard', () => {
     );
     const card = container.firstChild as HTMLElement;
     expect(card.className).toContain('cardDragDisabled');
+  });
+
+  // Phase 9 (09-02): card-on-card drop target (D-01, D-02)
+  describe('Phase 9: card-on-card drop target', () => {
+    it("calls useDroppable with 'card-target-' + issue.id", () => {
+      render(<IssueCard issue={createMockIssue({ id: 42 })} {...defaultProps} />);
+      expect(useDroppable).toHaveBeenCalledWith(
+        expect.objectContaining({ id: 'card-target-42' }),
+      );
+    });
+
+    it('applies dropTargetCard class when useDroppable.isOver is true', () => {
+      vi.mocked(useDroppable).mockReturnValue({
+        setNodeRef: vi.fn(),
+        isOver: true,
+      } as unknown as ReturnType<typeof useDroppable>);
+      const { container } = render(
+        <IssueCard issue={createMockIssue()} {...defaultProps} />,
+      );
+      const card = container.firstChild as HTMLElement;
+      expect(card.className).toContain('dropTargetCard');
+    });
+
+    it('does not apply dropTargetCard class when useDroppable.isOver is false', () => {
+      vi.mocked(useDroppable).mockReturnValue({
+        setNodeRef: vi.fn(),
+        isOver: false,
+      } as unknown as ReturnType<typeof useDroppable>);
+      const { container } = render(
+        <IssueCard issue={createMockIssue()} {...defaultProps} />,
+      );
+      const card = container.firstChild as HTMLElement;
+      expect(card.className).not.toContain('dropTargetCard');
+    });
+
+    it('still opens Backlog URL on click (D-10 regression guard)', async () => {
+      const user = userEvent.setup();
+      render(<IssueCard issue={createMockIssue()} {...defaultProps} />);
+      await user.click(screen.getByRole('link'));
+      expect(openUrl).toHaveBeenCalledWith(
+        'https://example.backlog.com/view/TEST-1',
+      );
+    });
+
+    it('disables useDroppable when isMultiMilestone is true (multi-milestone cards cannot be drop targets)', () => {
+      const issue = createMockIssue({
+        milestone: [
+          {
+            id: 100,
+            projectId: 1,
+            name: 'Sprint-2504',
+            description: null,
+            startDate: null,
+            releaseDueDate: null,
+            archived: false,
+            displayOrder: 0,
+          },
+          {
+            id: 200,
+            projectId: 1,
+            name: 'Sprint-2505',
+            description: null,
+            startDate: null,
+            releaseDueDate: null,
+            archived: false,
+            displayOrder: 0,
+          },
+        ],
+      });
+      render(<IssueCard issue={issue} {...defaultProps} />);
+      expect(useDroppable).toHaveBeenCalledWith(
+        expect.objectContaining({ disabled: true }),
+      );
+    });
   });
 });
