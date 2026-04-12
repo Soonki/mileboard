@@ -2,9 +2,30 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { toast } from 'sonner';
 import type { BoardData } from '../types/board';
 import type { BacklogIssue, BacklogMilestone } from '../types/backlog';
+import type { Group, GroupId } from '../types/group';
 
 vi.mock('../services/tauriBridge');
 vi.mock('./settingsStore');
+vi.mock('../utils/bulkMoveUtils', () => ({
+  bulkMoveIssues: vi.fn(),
+}));
+vi.mock('./groupStore', () => {
+  const mockMoveGroup = vi.fn();
+  const mockRemoveMember = vi.fn();
+  const mockGroups: Record<string, Group> = {};
+  return {
+    useGroupStore: {
+      getState: () => ({
+        groups: mockGroups,
+        moveGroup: mockMoveGroup,
+        removeMember: mockRemoveMember,
+      }),
+    },
+    __mockGroups: mockGroups,
+    __mockMoveGroup: mockMoveGroup,
+    __mockRemoveMember: mockRemoveMember,
+  };
+});
 
 import {
   useBoardStore,
@@ -14,11 +35,26 @@ import {
 } from './boardStore';
 import { fetchBoardData, updateIssueMilestone } from '../services/tauriBridge';
 import { useSettingsStore } from './settingsStore';
+import { bulkMoveIssues } from '../utils/bulkMoveUtils';
+import * as groupStoreModule from './groupStore';
 
 const mockFetchBoardData = vi.mocked(fetchBoardData);
 const mockUpdateIssueMilestone = vi.mocked(updateIssueMilestone);
 const mockUseSettingsStore = vi.mocked(useSettingsStore);
 const mockToastError = vi.mocked(toast.error);
+const mockToastLoading = vi.mocked(toast.loading);
+const mockToastSuccess = vi.mocked(toast.success);
+const mockBulkMoveIssues = vi.mocked(bulkMoveIssues);
+
+// Access internal mocks via the mocked module (they are exported alongside useGroupStore)
+const mockedGroupModule = groupStoreModule as unknown as {
+  __mockGroups: Record<string, Group>;
+  __mockMoveGroup: ReturnType<typeof vi.fn>;
+  __mockRemoveMember: ReturnType<typeof vi.fn>;
+};
+const mockGroups = mockedGroupModule.__mockGroups;
+const mockMoveGroup = mockedGroupModule.__mockMoveGroup;
+const mockRemoveMember = mockedGroupModule.__mockRemoveMember;
 
 // --- Test data factories ---
 
@@ -519,5 +555,330 @@ describe('moveIssue', () => {
         'マイルストーンの変更に失敗しました',
       );
     });
+  });
+});
+
+// --- bulkMoveGroup store action tests ---
+
+/**
+ * makeBoardDataForBulk:
+ *   milestone-10: issues 100, 101, 102 (group members)
+ *   milestone-20: empty
+ *   unassigned: empty
+ */
+function makeBoardDataForBulk(): BoardData {
+  return {
+    milestones: [
+      {
+        milestone: makeMilestone(10, 'Sprint 2604'),
+        issues: [
+          makeIssue(100, 'TEST-100'),
+          makeIssue(101, 'TEST-101'),
+          makeIssue(102, 'TEST-102'),
+        ],
+      },
+      {
+        milestone: makeMilestone(20, 'Sprint 2605'),
+        issues: [],
+      },
+    ],
+    unassignedIssues: [],
+  };
+}
+
+const TEST_GROUP_ID = 'group:test-1' as GroupId;
+
+function setupGroup(memberIds: number[], laneId: string): Group {
+  const group: Group = {
+    id: TEST_GROUP_ID,
+    memberIds,
+    laneId,
+  };
+  // Replace the contents of the shared mockGroups object (preserves the
+  // module-level reference that the mocked useGroupStore.getState closes over)
+  for (const key of Object.keys(mockGroups)) delete mockGroups[key];
+  mockGroups[TEST_GROUP_ID] = group;
+  return group;
+}
+
+describe('bulkMoveGroup', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseSettingsStore.getState.mockReturnValue({
+      settings: mockSettings,
+    } as ReturnType<typeof useSettingsStore.getState>);
+    // Reset shared mock group registry
+    for (const key of Object.keys(mockGroups)) delete mockGroups[key];
+  });
+
+  it('returns early when data is null', async () => {
+    useBoardStore.setState({ status: 'idle', data: null });
+    setupGroup([100, 101, 102], 'milestone-10');
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockBulkMoveIssues).not.toHaveBeenCalled();
+    expect(mockToastLoading).not.toHaveBeenCalled();
+  });
+
+  it('returns early when group does not exist', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    // No groups registered
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockBulkMoveIssues).not.toHaveBeenCalled();
+    expect(mockToastLoading).not.toHaveBeenCalled();
+  });
+
+  it('returns early when memberIssues is empty', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    // group references issues that don't exist in board data
+    setupGroup([9001, 9002, 9003], 'milestone-10');
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockBulkMoveIssues).not.toHaveBeenCalled();
+    expect(mockToastLoading).not.toHaveBeenCalled();
+  });
+
+  it('applies optimistic updates for all members to toLane', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    // bulkMoveIssues never resolves so we can inspect optimistic state
+    mockBulkMoveIssues.mockReturnValue(new Promise(() => {}));
+
+    void useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    // Allow microtasks to flush
+    await Promise.resolve();
+
+    const state = useBoardStore.getState();
+    const srcLane = state.data!.milestones.find((m) => m.milestone.id === 10);
+    const dstLane = state.data!.milestones.find((m) => m.milestone.id === 20);
+    expect(srcLane!.issues).toHaveLength(0);
+    expect(dstLane!.issues.map((i) => i.id).sort()).toEqual([100, 101, 102]);
+  });
+
+  it('calls useGroupStore.moveGroup(groupId, toLaneId) immediately after optimistic update', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockReturnValue(new Promise(() => {}));
+
+    void useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    await Promise.resolve();
+
+    expect(mockMoveGroup).toHaveBeenCalledWith(TEST_GROUP_ID, 'milestone-20');
+  });
+
+  it('calls toast.loading with initial N件を移動中... message', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockResolvedValue({
+      succeeded: [
+        makeIssue(100, 'TEST-100'),
+        makeIssue(101, 'TEST-101'),
+        makeIssue(102, 'TEST-102'),
+      ],
+      failed: [],
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockToastLoading).toHaveBeenCalledWith('3件を移動中...');
+  });
+
+  it('updates toast.loading with progress M/N 完了... (skipping completion)', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+
+    // Capture and invoke the onProgress callback before resolving
+    mockBulkMoveIssues.mockImplementation(async (params) => {
+      params.onProgress?.(1, 3);
+      params.onProgress?.(2, 3);
+      params.onProgress?.(3, 3); // completion -- should NOT trigger loading update
+      return {
+        succeeded: [
+          makeIssue(100, 'TEST-100'),
+          makeIssue(101, 'TEST-101'),
+          makeIssue(102, 'TEST-102'),
+        ],
+        failed: [],
+      };
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    // Initial loading + 1/3 + 2/3 = 3 loading calls (NOT 4 — 3/3 must be skipped)
+    expect(mockToastLoading).toHaveBeenCalledWith('3件を移動中...');
+    expect(mockToastLoading).toHaveBeenCalledWith('1/3 完了...', {
+      id: 'mock-toast-id',
+    });
+    expect(mockToastLoading).toHaveBeenCalledWith('2/3 完了...', {
+      id: 'mock-toast-id',
+    });
+    expect(mockToastLoading).not.toHaveBeenCalledWith(
+      '3/3 完了...',
+      expect.anything(),
+    );
+  });
+
+  it('shows toast.success on all success', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockResolvedValue({
+      succeeded: [
+        makeIssue(100, 'TEST-100'),
+        makeIssue(101, 'TEST-101'),
+        makeIssue(102, 'TEST-102'),
+      ],
+      failed: [],
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockToastSuccess).toHaveBeenCalledWith('3件を移動しました', {
+      id: 'mock-toast-id',
+    });
+    // Optimistic state should remain (toLane)
+    const state = useBoardStore.getState();
+    const dstLane = state.data!.milestones.find((m) => m.milestone.id === 20);
+    expect(dstLane!.issues).toHaveLength(3);
+  });
+
+  it('rolls back all and shows toast.error on all failure', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockResolvedValue({
+      succeeded: [],
+      failed: [
+        { issue: makeIssue(100, 'TEST-100'), error: new Error('e1') },
+        { issue: makeIssue(101, 'TEST-101'), error: new Error('e2') },
+        { issue: makeIssue(102, 'TEST-102'), error: new Error('e3') },
+      ],
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    // data restored to snapshot (all members back in milestone-10)
+    const state = useBoardStore.getState();
+    const srcLane = state.data!.milestones.find((m) => m.milestone.id === 10);
+    const dstLane = state.data!.milestones.find((m) => m.milestone.id === 20);
+    expect(srcLane!.issues.map((i) => i.id).sort()).toEqual([100, 101, 102]);
+    expect(dstLane!.issues).toHaveLength(0);
+
+    // group laneId reverted
+    expect(mockMoveGroup).toHaveBeenCalledWith(TEST_GROUP_ID, 'milestone-20');
+    expect(mockMoveGroup).toHaveBeenCalledWith(TEST_GROUP_ID, 'milestone-10');
+
+    // error toast with id
+    expect(mockToastError).toHaveBeenCalledWith(
+      '移動に失敗しました。再度お試しください',
+      { id: 'mock-toast-id' },
+    );
+  });
+
+  it('rolls back only failed in partial failure (D-19)', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockResolvedValue({
+      succeeded: [makeIssue(100, 'TEST-100'), makeIssue(102, 'TEST-102')],
+      failed: [{ issue: makeIssue(101, 'TEST-101'), error: new Error('e2') }],
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    const state = useBoardStore.getState();
+    const srcLane = state.data!.milestones.find((m) => m.milestone.id === 10);
+    const dstLane = state.data!.milestones.find((m) => m.milestone.id === 20);
+
+    // Failed member back in fromLane
+    expect(srcLane!.issues.map((i) => i.id)).toEqual([101]);
+    // Succeeded members stay in toLane
+    expect(dstLane!.issues.map((i) => i.id).sort()).toEqual([100, 102]);
+
+    // groupStore.removeMember called only for failed member
+    expect(mockRemoveMember).toHaveBeenCalledTimes(1);
+    expect(mockRemoveMember).toHaveBeenCalledWith(TEST_GROUP_ID, 101);
+    expect(mockRemoveMember).not.toHaveBeenCalledWith(TEST_GROUP_ID, 100);
+    expect(mockRemoveMember).not.toHaveBeenCalledWith(TEST_GROUP_ID, 102);
+  });
+
+  it('partial failure uses toast.error not toast.warning (D-18)', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockResolvedValue({
+      succeeded: [makeIssue(100, 'TEST-100'), makeIssue(102, 'TEST-102')],
+      failed: [{ issue: makeIssue(101, 'TEST-101'), error: new Error('e2') }],
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockToastError).toHaveBeenCalledWith(
+      '3件中1件の移動に失敗しました',
+      { id: 'mock-toast-id' },
+    );
+    // sonner mock doesn't expose warning at all (D-18 regression guard)
+    expect((toast as unknown as { warning?: unknown }).warning).toBeUndefined();
+  });
+
+  it('passes correct settings and toLaneId to bulkMoveIssues', async () => {
+    const boardData = makeBoardDataForBulk();
+    useBoardStore.setState({ status: 'loaded', data: boardData });
+    setupGroup([100, 101, 102], 'milestone-10');
+    mockBulkMoveIssues.mockResolvedValue({
+      succeeded: [
+        makeIssue(100, 'TEST-100'),
+        makeIssue(101, 'TEST-101'),
+        makeIssue(102, 'TEST-102'),
+      ],
+      failed: [],
+    });
+
+    await useBoardStore
+      .getState()
+      .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+    expect(mockBulkMoveIssues).toHaveBeenCalledTimes(1);
+    const callArg = mockBulkMoveIssues.mock.calls[0][0];
+    expect(callArg.toLaneId).toBe('milestone-20');
+    expect(callArg.hostUrl).toBe('test.backlog.com');
+    expect(callArg.apiKey).toBe('test-key');
+    expect(callArg.milestonePrefix).toBe('Sprint');
+    expect(callArg.members.map((i) => i.id)).toEqual([100, 101, 102]);
+    expect(typeof callArg.onProgress).toBe('function');
   });
 });
