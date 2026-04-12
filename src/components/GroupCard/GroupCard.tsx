@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { useDroppable } from '@dnd-kit/core';
 import { CSS } from '@dnd-kit/utilities';
@@ -11,7 +12,12 @@ interface GroupCardProps {
   slot: GroupSlot;
   laneId: string;
   milestonePrefix: string;
-  onExpand: (groupId: GroupId) => void;
+  /**
+   * Plan 04: signature widened to (groupId, DOMRect). The DOMRect is the
+   * GroupCard root's bounding rect at the moment of click — used by Board.tsx
+   * to position the GroupPopover anchor.
+   */
+  onExpand: (groupId: GroupId, rect: DOMRect) => void;
   isExpanded: boolean;
 }
 
@@ -41,9 +47,16 @@ export function GroupCard({
     disabled: sortable.isDragging,
   });
 
+  // Plan 04: keep our own ref to the root so we can call getBoundingClientRect()
+  // on click and pass the anchor rect to the GroupPopover via onExpand.
+  const groupRootRef = useRef<HTMLDivElement | null>(null);
+
   const setRefs = (el: HTMLElement | null): void => {
     sortable.setNodeRef(el);
     droppable.setNodeRef(el);
+    if (el instanceof HTMLDivElement) {
+      groupRootRef.current = el;
+    }
   };
 
   const style: CSSProperties = {
@@ -54,7 +67,8 @@ export function GroupCard({
   const handleClick = (e: MouseEvent<HTMLDivElement>): void => {
     if (sortable.isDragging) return;
     e.stopPropagation();
-    onExpand(slot.group.id);
+    const rect = groupRootRef.current?.getBoundingClientRect() ?? new DOMRect();
+    onExpand(slot.group.id, rect);
   };
 
   const rep = slot.representativeIssue;

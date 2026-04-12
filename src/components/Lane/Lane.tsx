@@ -26,8 +26,12 @@ interface LaneProps {
   milestonePrefix: string;
   isDropTarget?: boolean;
   hiddenCount?: number;
-  /** Phase 9: GroupCard クリック時に呼ばれる（Plan 04 で GroupPopover を開く） */
-  onExpand?: (groupId: GroupId) => void;
+  /**
+   * Phase 9: GroupCard クリック時に呼ばれる（Plan 04 で GroupPopover を開く）。
+   * Plan 04: 第 2 引数で GroupCard ルートの DOMRect を受け取り、Popover の
+   * アンカー位置として Board が利用する。
+   */
+  onExpand?: (groupId: GroupId, rect: DOMRect) => void;
   /** Phase 9: 現在展開中のグループ id（aria-expanded 用） */
   expandedGroupId?: GroupId | null;
 }

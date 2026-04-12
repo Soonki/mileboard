@@ -7,6 +7,7 @@ import { fetchBoardData, updateIssueMilestone } from '../services/tauriBridge';
 import { useSettingsStore } from './settingsStore';
 import { useGroupStore } from './groupStore';
 import { bulkMoveIssues } from '../utils/bulkMoveUtils';
+import { pruneStaleMembers } from '../utils/groupUtils';
 
 type BoardStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
@@ -150,6 +151,19 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
         settings.milestonePrefix,
       );
       set({ status: 'loaded', data, error: null, isReloading: false });
+
+      // Phase 9 Plan 04 (Q3): pruneStaleMembers ハウスキーピング。
+      // 直前の fetch 結果から消えた issue をグループから除去する。
+      // pruneStaleMembers は変更がなければ同一参照を返すので、その場合は setGroups を呼ばない。
+      const allIssues: BacklogIssue[] = [
+        ...data.unassignedIssues,
+        ...data.milestones.flatMap((m) => m.issues),
+      ];
+      const currentGroups = useGroupStore.getState().groups;
+      const prunedGroups = pruneStaleMembers(currentGroups, allIssues);
+      if (prunedGroups !== currentGroups) {
+        useGroupStore.getState().setGroups(prunedGroups);
+      }
     } catch (err: unknown) {
       const message =
         typeof err === 'string' ? err : 'データの取得に失敗しました';

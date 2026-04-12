@@ -39,6 +39,12 @@ interface GroupStoreState {
   moveGroup: (groupId: GroupId, toLaneId: string) => void;
   /** plugin-store から GroupMap を復元する（D-11）。 */
   loadFromStorage: () => Promise<void>;
+  /**
+   * Phase 9 Plan 04: GroupMap 全体を直接差し替える internal API。
+   * pruneStaleMembers の結果を一括反映する目的で boardStore.fetchBoard から呼ばれる。
+   * fire-and-forget で saveGroupConfig も走らせる。
+   */
+  setGroups: (groups: GroupMap) => void;
   /** テスト用：state を初期化する。 */
   reset: () => void;
 }
@@ -161,6 +167,11 @@ export const useGroupStore = create<GroupStoreState>()((set, get) => ({
   loadFromStorage: async () => {
     const config = await loadGroupConfig();
     if (config) set({ groups: config });
+  },
+
+  setGroups: (groups) => {
+    set({ groups });
+    saveGroupConfig(groups).catch(() => {});
   },
 
   reset: () => {

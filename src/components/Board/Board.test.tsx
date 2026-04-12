@@ -7,7 +7,7 @@ import type { BacklogIssue } from '../../types/backlog';
 
 const mockFetchBoard = vi.fn();
 const mockMoveIssue = vi.fn();
-const mockBulkMoveGroup = vi.fn();
+const mockBulkMoveGroup = vi.fn().mockResolvedValue(undefined);
 
 let mockStoreState: Record<string, unknown> = {};
 

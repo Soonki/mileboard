@@ -37,7 +37,46 @@ import { Lane } from '../Lane/Lane';
 import { DragOverlayCard } from '../DragOverlayCard/DragOverlayCard';
 import { BoardSkeleton } from '../BoardSkeleton/BoardSkeleton';
 import { BoardError } from '../BoardError/BoardError';
+import { GroupPopover } from '../GroupPopover/GroupPopover';
 import styles from './Board.module.css';
+
+/**
+ * Phase 9 Plan 04: filteredAndSortedView の型エイリアス。
+ * Board 内部で findGroupSlotInView ヘルパーが消費する。
+ */
+interface FilteredView {
+  milestones: Array<{
+    milestone: { id: number; name: string };
+    items: Array<BacklogIssue | GroupSlot>;
+    hiddenCount: number;
+  }>;
+  unassigned: {
+    items: Array<BacklogIssue | GroupSlot>;
+    hiddenCount: number;
+  };
+}
+
+/**
+ * Plan 04: filteredAndSortedView から指定 groupId の GroupSlot を見つけて返す。
+ * applyGroupExpansion 後の view を全レーン走査するため O(lanes * items)。
+ */
+function findGroupSlotInView(
+  view: FilteredView,
+  groupId: GroupId,
+): GroupSlot | null {
+  const allLanes: Array<Array<BacklogIssue | GroupSlot>> = [
+    view.unassigned.items,
+    ...view.milestones.map((m) => m.items),
+  ];
+  for (const items of allLanes) {
+    for (const item of items) {
+      if ('kind' in item && item.kind === 'group' && item.group.id === groupId) {
+        return item;
+      }
+    }
+  }
+  return null;
+}
 
 /**
  * Find which lane contains an item by its ID.
@@ -234,6 +273,66 @@ export function buildHandleDragEnd(
       return;
     }
 
+    // Phase 9 Plan 04 branch: group→lane bulk move
+    // The active.id is a `group:${string}` only when a GroupCard itself is being dragged.
+    const activeIdStr = String(activeId);
+    const isGroupDrag = activeIdStr.startsWith('group:');
+    if (isGroupDrag) {
+      // Only react to lane drops; card-target / group-target on a group drag are no-ops.
+      if (
+        typeof overId === 'string' &&
+        (overId === 'unassigned' || overId.startsWith('milestone-'))
+      ) {
+        const groupId = activeIdStr as GroupId;
+        const group = useGroupStore.getState().groups[groupId];
+        if (!group) return;
+        // Self-lane guard: dropping a group on its own lane is a no-op (T-09-04-01).
+        if (group.laneId === overId) return;
+
+        useBoardStore
+          .getState()
+          .bulkMoveGroup(groupId, group.laneId, overId)
+          .catch(() => {
+            // bulkMoveGroup handles its own toast lifecycle; just swallow here.
+          });
+
+        // orderMap: drop the group entry from the source lane and append it to the target lane.
+        const fromOrder = (orderMap[group.laneId] ?? []).filter(
+          (entry) => entry !== groupId,
+        );
+        const toOrder: ReorderEntry[] = [
+          ...(orderMap[overId] ?? []),
+          groupId,
+        ];
+        useReorderStore.getState().setLaneOrder(group.laneId, fromOrder);
+        useReorderStore.getState().setLaneOrder(overId, toOrder);
+      }
+      return;
+    }
+
+    // Phase 9 Plan 04 branch: popover member drag-out.
+    // active.id is a number AND that number is in some group's memberIds AND
+    // the target is a lane. We remove the member from the group and move it to the new lane.
+    const activeIdNum = Number(activeId);
+    if (
+      Number.isFinite(activeIdNum) &&
+      typeof overId === 'string' &&
+      (overId === 'unassigned' || overId.startsWith('milestone-'))
+    ) {
+      const allGroups = useGroupStore.getState().groups;
+      const containingGroup = Object.values(allGroups).find((g) =>
+        g.memberIds.includes(activeIdNum),
+      );
+      if (containingGroup) {
+        useGroupStore
+          .getState()
+          .removeMember(containingGroup.id, activeIdNum);
+        moveIssue(activeIdNum, containingGroup.laneId, overId);
+        updateOnCrossLaneMove(activeIdNum, containingGroup.laneId, overId);
+        return;
+      }
+    }
+
     // Phase 9 branch 3: existing lane drop logic (cross-lane move / intra-lane reorder)
     const fromLaneId = findLaneContaining(data, activeId as number);
     const toLaneId = resolveOverLaneId(data, overId);
@@ -271,6 +370,8 @@ export function Board() {
   const [overLaneId, setOverLaneId] = useState<string | null>(null);
   // Phase 9: 展開中のグループ id（Plan 04 で GroupPopover 表示時に利用）
   const [expandedGroupId, setExpandedGroupId] = useState<GroupId | null>(null);
+  // Phase 9 Plan 04: GroupPopover アンカー rect（GroupCard.getBoundingClientRect の結果）
+  const [anchorRect, setAnchorRect] = useState<DOMRect | null>(null);
   const status = useBoardStore((s) => s.status);
   const data = useBoardStore((s) => s.data);
   const error = useBoardStore((s) => s.error);
@@ -418,6 +519,40 @@ export function Board() {
       })
     : () => {};
 
+  /**
+   * Plan 04: GroupCard クリック時にレーンから受け取るコールバック。
+   * 展開対象 groupId と GroupCard の DOMRect (anchorRect) を保存する。
+   */
+  const handleGroupExpand = (groupId: GroupId, rect: DOMRect): void => {
+    setExpandedGroupId(groupId);
+    setAnchorRect(rect);
+  };
+
+  /**
+   * Plan 04: GroupPopover を閉じる共通ハンドラ。
+   * expandedGroupId と anchorRect を両方クリアする。
+   */
+  const handlePopoverClose = (): void => {
+    setExpandedGroupId(null);
+    setAnchorRect(null);
+  };
+
+  /**
+   * Plan 04: dissolveGroup 後に呼ばれるコールバック。
+   * groupStore.dissolveGroup は GroupPopover 側で実行済みなので、ここでは
+   * orderMap から `group:${id}` エントリを除去する後始末のみを行う。
+   * applyGroupExpansion は孤立した group エントリを skip するため害は無いが、
+   * 明示的なクリーンアップでセマンティクスを保つ。
+   */
+  const handleDissolveGroup = (groupId: GroupId): void => {
+    for (const [laneId, entries] of Object.entries(orderMap)) {
+      if (entries.some((entry) => entry === groupId)) {
+        const newEntries = entries.filter((entry) => entry !== groupId);
+        useReorderStore.getState().setLaneOrder(laneId, newEntries);
+      }
+    }
+  };
+
   useEffect(() => {
     fetchBoard();
   }, [fetchBoard]);
@@ -460,7 +595,7 @@ export function Board() {
                 hiddenCount={filteredAndSortedView.unassigned.hiddenCount}
                 milestonePrefix={milestonePrefix}
                 isDropTarget={overLaneId === 'unassigned'}
-                onExpand={(groupId) => setExpandedGroupId(groupId)}
+                onExpand={handleGroupExpand}
                 expandedGroupId={expandedGroupId}
               />
               {filteredAndSortedView.milestones.map(
@@ -475,7 +610,7 @@ export function Board() {
                     hiddenCount={hiddenCount}
                     milestonePrefix={milestonePrefix}
                     isDropTarget={overLaneId === `milestone-${milestone.id}`}
-                    onExpand={(groupId) => setExpandedGroupId(groupId)}
+                    onExpand={handleGroupExpand}
                     expandedGroupId={expandedGroupId}
                   />
                 ),
@@ -486,6 +621,30 @@ export function Board() {
         <DragOverlay>
           {activeIssue ? <DragOverlayCard issue={activeIssue} /> : null}
         </DragOverlay>
+        {/* Phase 9 Plan 04: Group expansion popover */}
+        {(() => {
+          if (
+            expandedGroupId === null ||
+            anchorRect === null ||
+            !filteredAndSortedView
+          ) {
+            return null;
+          }
+          const slot = findGroupSlotInView(
+            filteredAndSortedView,
+            expandedGroupId,
+          );
+          if (!slot) return null;
+          return (
+            <GroupPopover
+              slot={slot}
+              anchorRect={anchorRect}
+              milestonePrefix={milestonePrefix}
+              onClose={handlePopoverClose}
+              onDissolve={() => handleDissolveGroup(expandedGroupId)}
+            />
+          );
+        })()}
         <Toaster
           position="bottom-right"
           duration={5000}
