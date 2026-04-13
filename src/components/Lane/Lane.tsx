@@ -1,8 +1,5 @@
 import { useDroppable } from '@dnd-kit/core';
-import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
+import { SortableContext, type SortingStrategy } from '@dnd-kit/sortable';
 import type { BacklogIssue } from '../../types/backlog';
 import type { GroupSlot, GroupId } from '../../types/group';
 import { computeMemberBreakdown } from '../../utils/memberBreakdown';
@@ -39,6 +36,16 @@ interface LaneProps {
 function isGroupSlot(item: BacklogIssue | GroupSlot): item is GroupSlot {
   return 'kind' in item && item.kind === 'group';
 }
+
+/**
+ * Phase 9 UX refinement: a SortingStrategy that never shifts background
+ * items during drag. The dragging card is shown via DragOverlay, so other
+ * cards stay perfectly still — making it possible to precisely target a
+ * card for grouping without it moving away. The actual reorder/group
+ * operation is decided on drop via `kanbanCollisionDetection` and the
+ * drag-end branches in Board.tsx.
+ */
+const noShiftSortingStrategy: SortingStrategy = () => null;
 
 export function Lane({
   laneId,
@@ -86,7 +93,7 @@ export function Lane({
         issueCount={issueCount}
         memberBreakdown={memberBreakdown}
       />
-      <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+      <SortableContext items={sortableIds} strategy={noShiftSortingStrategy}>
         <div className={styles.cardList}>
           {items.length === 0 ? (
             hiddenCount > 0 ? (
