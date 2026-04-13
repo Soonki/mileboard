@@ -17,26 +17,26 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 
 ### ソート
 
-- [ ] **SORT-01**: レーン内のカードを担当者順でソートできる
-- [ ] **SORT-02**: レーン内のカードを期限日順でソートできる
-- [ ] **SORT-03**: ソート方向（昇順/降順）を切り替えられる
-- [ ] **SORT-04**: ソート設定がアプリ再起動後も保持される
+- [x] **SORT-01**: レーン内のカードを担当者順でソートできる
+- [x] **SORT-02**: レーン内のカードを期限日順でソートできる
+- [x] **SORT-03**: ソート方向（昇順/降順）を切り替えられる
+- [x] **SORT-04**: ソート設定がアプリ再起動後も保持される
 
 ### レーン内並べ替え
 
 - [x] **REORD-01**: レーン内でカードをDnDして並び順を変更できる
 - [x] **REORD-02**: カスタム並び順がアプリ再起動後も保持される（plugin-store）
-- [ ] **REORD-03**: ソートモード中は手動並べ替えが無効になり、モード表示される
+- [x] **REORD-03**: ソートモード中は手動並べ替えが無効になり、モード表示される
 
 ### グルーピング・一括移動
 
-- [ ] **GRP-01**: 複数カードを選択してグループ化できる（付箋を重ねるようなスタック表現）
-- [ ] **GRP-02**: レーン内ではグループの代表カード1枚のみ表示され、重なりでグループであることが視覚的にわかる
-- [ ] **GRP-03**: グループをクリックすると展開され、含まれる課題一覧を閲覧できる
-- [ ] **GRP-04**: グループをDnDで別レーンに移動すると、含まれる全課題が一括移動される
-- [ ] **GRP-05**: 1レーン内に複数のグループを作成できる
-- [ ] **GRP-06**: グループの解除（個別カードに戻す）ができる
-- [ ] **GRP-07**: 一括移動中に進捗が表示され、部分失敗時は個別ロールバック+resyncされる
+- [x] **GRP-01**: 複数カードを選択してグループ化できる（付箋を重ねるようなスタック表現）
+- [x] **GRP-02**: レーン内ではグループの代表カード1枚のみ表示され、重なりでグループであることが視覚的にわかる
+- [x] **GRP-03**: グループをクリックすると展開され、含まれる課題一覧を閲覧できる
+- [x] **GRP-04**: グループをDnDで別レーンに移動すると、含まれる全課題が一括移動される
+- [x] **GRP-05**: 1レーン内に複数のグループを作成できる
+- [x] **GRP-06**: グループの解除（個別カードに戻す）ができる
+- [x] **GRP-07**: 一括移動中に進捗が表示され、部分失敗時は個別ロールバック+resyncされる
 
 ## Future Requirements
 
@@ -58,25 +58,25 @@ Requirements for v1.1 release. Each maps to roadmap phases.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| FILT-01 | Phase 6 | Pending |
-| FILT-02 | Phase 6 | Pending |
-| FILT-03 | Phase 6 | Pending |
-| FILT-04 | Phase 6 | Pending |
-| FILT-05 | Phase 6 | Pending |
-| SORT-01 | Phase 7 | Pending |
-| SORT-02 | Phase 7 | Pending |
-| SORT-03 | Phase 7 | Pending |
-| SORT-04 | Phase 7 | Pending |
+| FILT-01 | Phase 6 | Complete |
+| FILT-02 | Phase 6 | Complete |
+| FILT-03 | Phase 6 | Complete |
+| FILT-04 | Phase 6 | Complete |
+| FILT-05 | Phase 6 | Complete |
+| SORT-01 | Phase 7 | Complete |
+| SORT-02 | Phase 7 | Complete |
+| SORT-03 | Phase 7 | Complete |
+| SORT-04 | Phase 7 | Complete |
 | REORD-01 | Phase 8 | Complete |
 | REORD-02 | Phase 8 | Complete |
-| REORD-03 | Phase 8 | Pending |
-| GRP-01 | Phase 9 | Pending |
-| GRP-02 | Phase 9 | Pending |
-| GRP-03 | Phase 9 | Pending |
-| GRP-04 | Phase 9 | Pending |
-| GRP-05 | Phase 9 | Pending |
-| GRP-06 | Phase 9 | Pending |
-| GRP-07 | Phase 9 | Pending |
+| REORD-03 | Phase 8 | Complete |
+| GRP-01 | Phase 9 | Complete |
+| GRP-02 | Phase 9 | Complete |
+| GRP-03 | Phase 9 | Complete |
+| GRP-04 | Phase 9 | Complete |
+| GRP-05 | Phase 9 | Complete |
+| GRP-06 | Phase 9 | Complete |
+| GRP-07 | Phase 9 | Complete |
 
 **Coverage:**
 - v1.1 requirements: 19 total
