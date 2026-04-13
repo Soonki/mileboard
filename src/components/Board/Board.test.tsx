@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import '@testing-library/jest-dom';
-import { Board } from './Board';
+import { Board, prioritiseCardOrGroupCollisions } from './Board';
 import type { BoardData } from '../../types/board';
 import type { BacklogIssue } from '../../types/backlog';
 
@@ -719,6 +719,65 @@ describe('Board', () => {
         render(<Board />);
         expect(screen.queryByTestId('group-popover')).toBeNull();
       });
+    });
+  });
+
+  // --- Phase 9 regression: prioritiseCardOrGroupCollisions ---
+  describe('prioritiseCardOrGroupCollisions (Phase 9 drop-target prioritisation)', () => {
+    /**
+     * Regression guard: when a card is dropped on another card, pointerWithin
+     * returns both the card-target droppable AND the lane droppable. Without
+     * prioritisation, @dnd-kit picks the lane first and triggers a lane-level
+     * reorder instead of the group-creation flow — this was the reported
+     * "グルーピング機能がありません" bug.
+     */
+    const makeCollision = (id: string | number) => ({ id });
+
+    it('prefers card-target-* over lane collisions', () => {
+      const input = [
+        makeCollision('milestone-1'),
+        makeCollision('card-target-100'),
+      ];
+      const result = prioritiseCardOrGroupCollisions(input);
+      expect(result).toEqual([makeCollision('card-target-100')]);
+    });
+
+    it('prefers group-target-* over lane collisions', () => {
+      const input = [
+        makeCollision('milestone-1'),
+        makeCollision('group-target-group:abc'),
+      ];
+      const result = prioritiseCardOrGroupCollisions(input);
+      expect(result).toEqual([makeCollision('group-target-group:abc')]);
+    });
+
+    it('keeps all card/group targets when multiple are present', () => {
+      const input = [
+        makeCollision('milestone-1'),
+        makeCollision('card-target-100'),
+        makeCollision('group-target-group:abc'),
+      ];
+      const result = prioritiseCardOrGroupCollisions(input);
+      expect(result).toEqual([
+        makeCollision('card-target-100'),
+        makeCollision('group-target-group:abc'),
+      ]);
+    });
+
+    it('returns original collisions when no card/group targets are present', () => {
+      const input = [makeCollision('milestone-1'), makeCollision('milestone-2')];
+      const result = prioritiseCardOrGroupCollisions(input);
+      expect(result).toEqual(input);
+    });
+
+    it('handles empty array', () => {
+      expect(prioritiseCardOrGroupCollisions([])).toEqual([]);
+    });
+
+    it('handles numeric ids (lane collisions with numeric id)', () => {
+      const input = [makeCollision(42), makeCollision('card-target-100')];
+      const result = prioritiseCardOrGroupCollisions(input);
+      expect(result).toEqual([makeCollision('card-target-100')]);
     });
   });
 });

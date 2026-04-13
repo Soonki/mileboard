@@ -110,14 +110,33 @@ function resolveOverLaneId(
 }
 
 /**
+ * Phase 9: given a list of collisions from pointerWithin, prefer
+ * card-target-* / group-target-* entries over lane-level ones. Extracted
+ * as a pure helper so it can be unit-tested without mocking @dnd-kit.
+ */
+export function prioritiseCardOrGroupCollisions<
+  C extends { id: string | number },
+>(collisions: C[]): C[] {
+  const cardOrGroup = collisions.filter((c) => {
+    const id = String(c.id);
+    return id.startsWith('card-target-') || id.startsWith('group-target-');
+  });
+  return cardOrGroup.length > 0 ? cardOrGroup : collisions;
+}
+
+/**
  * Custom collision detection for kanban board.
  * pointerWithin for accurate lane boundary detection,
  * rectIntersection fallback when pointer is in the gap between lanes.
+ *
+ * Phase 9: card-target-* / group-target-* collisions are prioritised over
+ * lane-level collisions so that dropping a card onto another card triggers
+ * group creation instead of a lane-level reorder.
  */
-const kanbanCollisionDetection: CollisionDetection = (args) => {
+export const kanbanCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
   if (pointerCollisions.length > 0) {
-    return pointerCollisions;
+    return prioritiseCardOrGroupCollisions(pointerCollisions);
   }
   return rectIntersection(args);
 };
