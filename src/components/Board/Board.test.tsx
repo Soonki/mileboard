@@ -598,6 +598,98 @@ describe('Board', () => {
         expect(mockGroupStoreState.addMember).not.toHaveBeenCalled();
       });
 
+      // --- Regression: popover-drag-to-card/group double-assignment fix ---
+
+      it('card-target: popover member dropped on a plain card removes from origin group before createGroup', () => {
+        // Source 99 is in group A; target 100 is a plain card.
+        mockGroupStoreState.groups = {
+          'group:A': {
+            id: 'group:A',
+            memberIds: [99, 200],
+            laneId: 'milestone-1',
+          },
+        };
+        mockGroupStoreState.createGroup.mockReturnValue('group:new-id');
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'card-target-100' },
+        } as unknown as Parameters<typeof handler>[0]);
+        // 元グループから remove されていること
+        expect(mockGroupStoreState.removeMember).toHaveBeenCalledWith('group:A', 99);
+        // その上で新規グループ作成
+        expect(mockGroupStoreState.createGroup).toHaveBeenCalledWith(
+          [99, 100],
+          'milestone-1',
+          expect.any(Array),
+        );
+        mockGroupStoreState.groups = {};
+      });
+
+      it('card-target: source and target in same group is a no-op (intra-group self-drop)', () => {
+        mockGroupStoreState.groups = {
+          'group:same': {
+            id: 'group:same',
+            memberIds: [99, 100],
+            laneId: 'milestone-1',
+          },
+        };
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'card-target-100' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.removeMember).not.toHaveBeenCalled();
+        expect(mockGroupStoreState.createGroup).not.toHaveBeenCalled();
+        mockGroupStoreState.groups = {};
+      });
+
+      it('group-target: popover member dropped on another group removes from origin group before addMember', () => {
+        // Source 99 is in group A; target is group B.
+        mockGroupStoreState.groups = {
+          'group:A': {
+            id: 'group:A',
+            memberIds: [99, 200],
+            laneId: 'milestone-1',
+          },
+          'group:B': {
+            id: 'group:B',
+            memberIds: [300, 400],
+            laneId: 'milestone-1',
+          },
+        };
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'group-target-group:B' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.removeMember).toHaveBeenCalledWith('group:A', 99);
+        expect(mockGroupStoreState.addMember).toHaveBeenCalledWith(
+          'group:B',
+          99,
+          expect.any(Array),
+        );
+        mockGroupStoreState.groups = {};
+      });
+
+      it('group-target: dropping a member on its own group is a no-op', () => {
+        mockGroupStoreState.groups = {
+          'group:A': {
+            id: 'group:A',
+            memberIds: [99, 200],
+            laneId: 'milestone-1',
+          },
+        };
+        const handler = buildHandleDragEnd(makeParams());
+        handler({
+          active: { id: 99 },
+          over: { id: 'group-target-group:A' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.removeMember).not.toHaveBeenCalled();
+        expect(mockGroupStoreState.addMember).not.toHaveBeenCalled();
+        mockGroupStoreState.groups = {};
+      });
+
       // --- Plan 04: group→lane bulk move + popover member drag-out ---
 
       it('group→lane branch: drops a group on a different lane and calls bulkMoveGroup', () => {

@@ -248,6 +248,30 @@ export function buildHandleDragEnd(
       if (rejectMultiMilestoneMember(targetIssue, milestonePrefix)) return;
       const targetLaneId = findLaneContaining(data, targetIssueId);
       if (!targetLaneId) return;
+      // Popover drag-to-card: if source is already a member of another group,
+      // remove it from the origin group first so it is not double-assigned.
+      // If both source and target live in the SAME group, this is a no-op to
+      // prevent accidental self-group reshuffling (intra-group reorder is
+      // not supported in Phase 9).
+      const allGroups = useGroupStore.getState().groups;
+      const sourceContainingGroup = Object.values(allGroups).find((g) =>
+        g.memberIds.includes(sourceIssueId),
+      );
+      const targetContainingGroup = Object.values(allGroups).find((g) =>
+        g.memberIds.includes(targetIssueId),
+      );
+      if (
+        sourceContainingGroup &&
+        targetContainingGroup &&
+        sourceContainingGroup.id === targetContainingGroup.id
+      ) {
+        return;
+      }
+      if (sourceContainingGroup) {
+        useGroupStore
+          .getState()
+          .removeMember(sourceContainingGroup.id, sourceIssueId);
+      }
       const allIssues = collectAllIssues(data);
       const newGroupId = useGroupStore
         .getState()
@@ -278,6 +302,20 @@ export function buildHandleDragEnd(
       if (!sourceIssue) return;
       // D-16 / Q4 guard
       if (rejectMultiMilestoneMember(sourceIssue, milestonePrefix)) return;
+      // Popover drag-to-group: if source is already a member of another group,
+      // remove it from the origin group first (self-group drop is a no-op).
+      const allGroups = useGroupStore.getState().groups;
+      const sourceContainingGroup = Object.values(allGroups).find((g) =>
+        g.memberIds.includes(sourceIssueId),
+      );
+      if (sourceContainingGroup && sourceContainingGroup.id === targetGroupId) {
+        return;
+      }
+      if (sourceContainingGroup) {
+        useGroupStore
+          .getState()
+          .removeMember(sourceContainingGroup.id, sourceIssueId);
+      }
       const allIssues = collectAllIssues(data);
       useGroupStore
         .getState()
