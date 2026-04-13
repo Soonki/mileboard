@@ -125,18 +125,56 @@ export function prioritiseCardOrGroupCollisions<
 }
 
 /**
+ * Phase 9 UX refinement: card-target-* collisions are only kept when the
+ * pointer is within the CENTER vertical band of the card. Top/bottom edge
+ * drops fall through to the lane-level collision so they can be handled as
+ * intra-lane reorder (sort) rather than group creation.
+ *
+ * `centerRatio` = portion of card height that counts as the grouping zone.
+ * Default 0.5 means the middle 50% triggers grouping and the top/bottom 25%
+ * each trigger reorder.
+ */
+export function filterCardTargetsByPointerZone<
+  C extends { id: string | number },
+>(
+  collisions: C[],
+  droppableRects: Map<string | number, { top: number; height: number }>,
+  pointerY: number | null,
+  centerRatio = 0.5,
+): C[] {
+  if (pointerY === null) return collisions;
+  return collisions.filter((c) => {
+    const id = String(c.id);
+    if (!id.startsWith('card-target-')) return true;
+    const rect = droppableRects.get(c.id);
+    if (!rect) return true;
+    const edgeSize = (rect.height * (1 - centerRatio)) / 2;
+    const centerTop = rect.top + edgeSize;
+    const centerBottom = rect.top + rect.height - edgeSize;
+    return pointerY >= centerTop && pointerY <= centerBottom;
+  });
+}
+
+/**
  * Custom collision detection for kanban board.
  * pointerWithin for accurate lane boundary detection,
  * rectIntersection fallback when pointer is in the gap between lanes.
  *
  * Phase 9: card-target-* / group-target-* collisions are prioritised over
- * lane-level collisions so that dropping a card onto another card triggers
- * group creation instead of a lane-level reorder.
+ * lane-level collisions. Additionally, card-target-* collisions on the top
+ * or bottom edge of a card are filtered out so those zones act as reorder
+ * drop targets rather than group creation — this makes sort vs grouping
+ * distinguishable by pointer position.
  */
 export const kanbanCollisionDetection: CollisionDetection = (args) => {
   const pointerCollisions = pointerWithin(args);
   if (pointerCollisions.length > 0) {
-    return prioritiseCardOrGroupCollisions(pointerCollisions);
+    const zoneFiltered = filterCardTargetsByPointerZone(
+      pointerCollisions,
+      args.droppableRects,
+      args.pointerCoordinates?.y ?? null,
+    );
+    return prioritiseCardOrGroupCollisions(zoneFiltered);
   }
   return rectIntersection(args);
 };
