@@ -21,6 +21,7 @@ import { useFilterStore } from '../../stores/filterStore';
 import { useSortStore } from '../../stores/sortStore';
 import { useReorderStore } from '../../stores/reorderStore';
 import { useGroupStore } from '../../stores/groupStore';
+import { useUiModeStore, type UiMode } from '../../stores/uiModeStore';
 import { applyFilters } from '../../utils/filterUtils';
 import { applySortToIssues } from '../../utils/sortUtils';
 import { applyCustomOrder } from '../../utils/reorderUtils';
@@ -125,59 +126,47 @@ export function prioritiseCardOrGroupCollisions<
 }
 
 /**
- * Phase 9 UX refinement: card-target-* collisions are only kept when the
- * pointer is within the CENTER vertical band of the card. Top/bottom edge
- * drops fall through to the lane-level collision so they can be handled as
- * intra-lane reorder (sort) rather than group creation.
- *
- * `centerRatio` = portion of card height that counts as the grouping zone.
- * Default 0.5 means the middle 50% triggers grouping and the top/bottom 25%
- * each trigger reorder.
+ * Phase 9: in sort mode, card-target-* / group-target-* collisions are
+ * filtered out entirely so that drops on cards behave as lane-level reorder
+ * / cross-lane move instead of triggering grouping. Pure helper.
  */
-export function filterCardTargetsByPointerZone<
+export function filterOutCardOrGroupCollisions<
   C extends { id: string | number },
->(
-  collisions: C[],
-  droppableRects: Map<string | number, { top: number; height: number }>,
-  pointerY: number | null,
-  centerRatio = 0.5,
-): C[] {
-  if (pointerY === null) return collisions;
+>(collisions: C[]): C[] {
   return collisions.filter((c) => {
     const id = String(c.id);
-    if (!id.startsWith('card-target-')) return true;
-    const rect = droppableRects.get(c.id);
-    if (!rect) return true;
-    const edgeSize = (rect.height * (1 - centerRatio)) / 2;
-    const centerTop = rect.top + edgeSize;
-    const centerBottom = rect.top + rect.height - edgeSize;
-    return pointerY >= centerTop && pointerY <= centerBottom;
+    return !id.startsWith('card-target-') && !id.startsWith('group-target-');
   });
 }
 
 /**
- * Custom collision detection for kanban board.
- * pointerWithin for accurate lane boundary detection,
- * rectIntersection fallback when pointer is in the gap between lanes.
+ * Phase 9: build a CollisionDetection function for the kanban board, gated
+ * by the current UI mode.
  *
- * Phase 9: card-target-* / group-target-* collisions are prioritised over
- * lane-level collisions. Additionally, card-target-* collisions on the top
- * or bottom edge of a card are filtered out so those zones act as reorder
- * drop targets rather than group creation — this makes sort vs grouping
- * distinguishable by pointer position.
+ * - **sort mode**  : card-target-* / group-target-* collisions are removed,
+ *   so all drops fall through to lane-level collisions (intra-lane reorder
+ *   or cross-lane move). Background cards shift via verticalListSortingStrategy
+ *   for drop preview UX.
+ * - **group mode** : card-target-* / group-target-* collisions are prioritised
+ *   over lane-level collisions, so dropping anywhere on a card creates a
+ *   group, and dropping anywhere on a group adds the card as a member.
+ *
+ * pointerWithin for accurate lane boundary detection, rectIntersection
+ * fallback when the pointer is in the gap between lanes.
  */
-export const kanbanCollisionDetection: CollisionDetection = (args) => {
-  const pointerCollisions = pointerWithin(args);
-  if (pointerCollisions.length > 0) {
-    const zoneFiltered = filterCardTargetsByPointerZone(
-      pointerCollisions,
-      args.droppableRects,
-      args.pointerCoordinates?.y ?? null,
-    );
-    return prioritiseCardOrGroupCollisions(zoneFiltered);
-  }
-  return rectIntersection(args);
-};
+export function buildKanbanCollisionDetection(mode: UiMode): CollisionDetection {
+  return (args) => {
+    const pointerCollisions = pointerWithin(args);
+    if (pointerCollisions.length > 0) {
+      if (mode === 'sort') {
+        const filtered = filterOutCardOrGroupCollisions(pointerCollisions);
+        return filtered.length > 0 ? filtered : pointerCollisions;
+      }
+      return prioritiseCardOrGroupCollisions(pointerCollisions);
+    }
+    return rectIntersection(args);
+  };
+}
 
 /** 全レーン + unassigned の issue を 1 配列に集める（groupStore に渡す用） */
 function collectAllIssues(data: BoardData): BacklogIssue[] {
@@ -236,6 +225,11 @@ interface BuildHandleDragEndParams {
     toLaneId: string,
   ) => void;
   getLaneItems: (laneId: string) => Array<BacklogIssue | GroupSlot>;
+  /**
+   * Phase 9: UI 操作モード。group モード時は intra-lane reorder を発火しない。
+   * 省略時は 'sort'（後方互換のため既存テストはそのまま動く）。
+   */
+  uiMode?: UiMode;
 }
 
 /**
@@ -264,6 +258,7 @@ export function buildHandleDragEnd(
       reorder,
       updateOnCrossLaneMove,
       getLaneItems,
+      uiMode = 'sort',
     } = params;
 
     setActiveIssue(null);
@@ -438,6 +433,9 @@ export function buildHandleDragEnd(
       // レーン内並べ替え（REORD-01）
       // ソートモード中は何もしない
       if (sortField !== 'none') return;
+      // Phase 9: group モード中は intra-lane reorder を発火しない
+      // (グルーピング操作とソート操作を完全に分離するため)
+      if (uiMode === 'group') return;
       const activeIdNum = activeId as number;
       const overIdNum = overId as number;
       if (activeIdNum !== overIdNum) {
@@ -487,6 +485,10 @@ export function Board() {
 
   // Phase 9: subscribe to groupStore so view re-computes when groups change
   const groupMap = useGroupStore((s) => s.groups);
+
+  // Phase 9: UI 操作モード（'sort' | 'group'）。永続化なし、起動毎に 'sort' から開始。
+  const uiMode = useUiModeStore((s) => s.mode);
+  const toggleUiMode = useUiModeStore((s) => s.toggleMode);
 
   // D-09: dataはraw unfiltered、ビュー層でのみフィルタ・ソート・グループ展開を適用
   const filteredAndSortedView = useMemo(() => {
@@ -611,8 +613,28 @@ export function Board() {
         reorder,
         updateOnCrossLaneMove,
         getLaneItems,
+        uiMode,
       })
     : () => {};
+
+  // Phase 9: mode に依存する collision detection を memo 化
+  const collisionDetection = useMemo(
+    () => buildKanbanCollisionDetection(uiMode),
+    [uiMode],
+  );
+
+  // Phase 9: キーボードショートカット Ctrl+Shift+M (Cmd+Shift+M on Mac) で
+  // 操作モードを切り替える。Tauri/WebView でも安全な組み合わせ。
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'M' || e.key === 'm')) {
+        e.preventDefault();
+        toggleUiMode();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [toggleUiMode]);
 
   /**
    * Plan 04: GroupCard クリック時にレーンから受け取るコールバック。
@@ -669,7 +691,7 @@ export function Board() {
     return (
       <DndContext
         sensors={sensors}
-        collisionDetection={kanbanCollisionDetection}
+        collisionDetection={collisionDetection}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
@@ -692,6 +714,7 @@ export function Board() {
                 isDropTarget={overLaneId === 'unassigned'}
                 onExpand={handleGroupExpand}
                 expandedGroupId={expandedGroupId}
+                uiMode={uiMode}
               />
               {filteredAndSortedView.milestones.map(
                 ({ milestone, items, hiddenCount }) => (
@@ -707,6 +730,7 @@ export function Board() {
                     isDropTarget={overLaneId === `milestone-${milestone.id}`}
                     onExpand={handleGroupExpand}
                     expandedGroupId={expandedGroupId}
+                    uiMode={uiMode}
                   />
                 ),
               )}

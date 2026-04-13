@@ -1,4 +1,5 @@
 import { useBoardStore } from '../../stores/boardStore';
+import { ModeToggle } from '../ModeToggle/ModeToggle';
 import styles from './BoardHeader.module.css';
 
 interface BoardHeaderProps {
@@ -16,6 +17,7 @@ export function BoardHeader({ onSettingsOpen }: BoardHeaderProps) {
     <header className={styles.header}>
       <h1 className={styles.title}>mileboard</h1>
       <div className={styles.actions}>
+        <ModeToggle />
         <button
           className={styles.reloadButton}
           onClick={fetchBoard}

@@ -4,7 +4,8 @@ import '@testing-library/jest-dom';
 import {
   Board,
   prioritiseCardOrGroupCollisions,
-  filterCardTargetsByPointerZone,
+  filterOutCardOrGroupCollisions,
+  buildKanbanCollisionDetection,
 } from './Board';
 import type { BoardData } from '../../types/board';
 import type { BacklogIssue } from '../../types/backlog';
@@ -602,6 +603,72 @@ describe('Board', () => {
         expect(mockGroupStoreState.addMember).not.toHaveBeenCalled();
       });
 
+      // --- Phase 9 mode-based behaviour ---
+
+      it('group mode: intra-lane numeric reorder is a no-op', () => {
+        const reorderSpy = vi.fn();
+        const params = { ...makeParams(), reorder: reorderSpy, uiMode: 'group' as const };
+        const handler = buildHandleDragEnd(params);
+        // Drop card 99 onto card 100 within the same lane, but as a numeric
+        // collision (lane id, not card-target). In group mode, this should NOT
+        // reorder.
+        handler({
+          active: { id: 99 },
+          over: { id: 100 },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(reorderSpy).not.toHaveBeenCalled();
+      });
+
+      it('sort mode: intra-lane numeric reorder still fires (default)', () => {
+        const reorderSpy = vi.fn();
+        const params = { ...makeParams(), reorder: reorderSpy, uiMode: 'sort' as const };
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 99 },
+          over: { id: 100 },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(reorderSpy).toHaveBeenCalledWith('milestone-1', 99, 100);
+      });
+
+      it('group mode: cross-lane move still works', () => {
+        const moveIssueSpy = vi.fn();
+        const params = {
+          ...makeParams(),
+          moveIssue: moveIssueSpy,
+          uiMode: 'group' as const,
+        };
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 99 },
+          over: { id: 'unassigned' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(moveIssueSpy).toHaveBeenCalledWith(99, 'milestone-1', 'unassigned');
+      });
+
+      it('group mode: card-target branch still creates groups', () => {
+        mockGroupStoreState.createGroup.mockReturnValue('group:created-id');
+        const params = { ...makeParams(), uiMode: 'group' as const };
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 99 },
+          over: { id: 'card-target-100' },
+        } as unknown as Parameters<typeof handler>[0]);
+        expect(mockGroupStoreState.createGroup).toHaveBeenCalled();
+      });
+
+      it('uiMode defaults to sort when not specified (backward compat)', () => {
+        const reorderSpy = vi.fn();
+        const params = { ...makeParams(), reorder: reorderSpy };
+        // Note: no uiMode field in params
+        const handler = buildHandleDragEnd(params);
+        handler({
+          active: { id: 99 },
+          over: { id: 100 },
+        } as unknown as Parameters<typeof handler>[0]);
+        // Sort behavior (reorder fires) is the default
+        expect(reorderSpy).toHaveBeenCalled();
+      });
+
       // --- Regression: popover-drag-to-card/group double-assignment fix ---
 
       it('card-target: popover member dropped on a plain card removes from origin group before createGroup', () => {
@@ -877,124 +944,100 @@ describe('Board', () => {
     });
   });
 
-  // --- Phase 9 UX refinement: pointer-zone filter for card-target ---
-  describe('filterCardTargetsByPointerZone (sort vs group zone)', () => {
-    /**
-     * When pointer is on the center band of a card, card-target-* collisions
-     * are kept (grouping zone). When pointer is on the top/bottom edges, they
-     * are filtered out so lane-level reorder wins (sort zone).
-     *
-     * centerRatio default = 0.5 → middle 50% is grouping, top/bottom 25%
-     * each are reorder.
-     */
+  // --- Phase 9 mode-based collision detection ---
+  describe('filterOutCardOrGroupCollisions (sort mode helper)', () => {
     const makeCollision = (id: string | number) => ({ id });
 
-    it('keeps card-target when pointer is in the middle 50% of the card', () => {
-      // Card: top=100, height=80 → middle = [120, 160]
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
-        ['milestone-1', { top: 0, height: 800 }],
-      ]);
-      const collisions = [
-        makeCollision('card-target-100'),
+    it('removes card-target-* collisions', () => {
+      const input = [
         makeCollision('milestone-1'),
-      ];
-      // Pointer at y=140 (exact center)
-      const result = filterCardTargetsByPointerZone(collisions, droppableRects, 140);
-      expect(result).toEqual(collisions);
-    });
-
-    it('removes card-target when pointer is on the top 25% edge', () => {
-      // Card: top=100, height=80 → top edge = [100, 120)
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
-        ['milestone-1', { top: 0, height: 800 }],
-      ]);
-      const collisions = [
         makeCollision('card-target-100'),
-        makeCollision('milestone-1'),
       ];
-      // Pointer at y=105 (in the top edge)
-      const result = filterCardTargetsByPointerZone(collisions, droppableRects, 105);
-      expect(result).toEqual([makeCollision('milestone-1')]);
+      expect(filterOutCardOrGroupCollisions(input)).toEqual([
+        makeCollision('milestone-1'),
+      ]);
     });
 
-    it('removes card-target when pointer is on the bottom 25% edge', () => {
-      // Card: top=100, height=80 → bottom edge = (160, 180]
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
+    it('removes group-target-* collisions', () => {
+      const input = [
+        makeCollision('milestone-1'),
+        makeCollision('group-target-group:abc'),
+      ];
+      expect(filterOutCardOrGroupCollisions(input)).toEqual([
+        makeCollision('milestone-1'),
       ]);
-      const collisions = [makeCollision('card-target-100')];
-      // Pointer at y=175 (in the bottom edge)
-      const result = filterCardTargetsByPointerZone(collisions, droppableRects, 175);
-      expect(result).toEqual([]);
     });
 
-    it('keeps card-target at the exact center boundary (inclusive)', () => {
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
-      ]);
-      const collisions = [makeCollision('card-target-100')];
-      // centerTop = 100 + 20 = 120, centerBottom = 100 + 80 - 20 = 160
-      expect(
-        filterCardTargetsByPointerZone(collisions, droppableRects, 120),
-      ).toEqual(collisions);
-      expect(
-        filterCardTargetsByPointerZone(collisions, droppableRects, 160),
-      ).toEqual(collisions);
-    });
-
-    it('leaves non-card-target collisions alone even on edge zones', () => {
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
-        ['group-target-group:abc', { top: 100, height: 80 }],
-        ['milestone-1', { top: 0, height: 800 }],
-      ]);
-      const collisions = [
+    it('removes both card-target and group-target', () => {
+      const input = [
+        makeCollision('milestone-1'),
         makeCollision('card-target-100'),
         makeCollision('group-target-group:abc'),
-        makeCollision('milestone-1'),
+        makeCollision(42),
       ];
-      // Pointer at y=105 (top edge of card rect)
-      const result = filterCardTargetsByPointerZone(collisions, droppableRects, 105);
-      // card-target removed, group-target kept, lane kept
-      expect(result).toEqual([
-        makeCollision('group-target-group:abc'),
+      expect(filterOutCardOrGroupCollisions(input)).toEqual([
         makeCollision('milestone-1'),
+        makeCollision(42),
       ]);
     });
 
-    it('returns all collisions when pointerY is null', () => {
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
-      ]);
-      const collisions = [makeCollision('card-target-100')];
-      const result = filterCardTargetsByPointerZone(collisions, droppableRects, null);
-      expect(result).toEqual(collisions);
+    it('keeps everything when no card/group targets present', () => {
+      const input = [makeCollision('milestone-1'), makeCollision(42)];
+      expect(filterOutCardOrGroupCollisions(input)).toEqual(input);
     });
 
-    it('keeps card-target when rect is unknown (map miss)', () => {
-      const droppableRects = new Map<string | number, { top: number; height: number }>();
-      const collisions = [makeCollision('card-target-100')];
-      const result = filterCardTargetsByPointerZone(collisions, droppableRects, 500);
-      expect(result).toEqual(collisions);
+    it('handles empty input', () => {
+      expect(filterOutCardOrGroupCollisions([])).toEqual([]);
+    });
+  });
+
+  describe('buildKanbanCollisionDetection (mode-based factory)', () => {
+    /**
+     * In sort mode, card-target / group-target collisions are filtered out
+     * so the user's drag is interpreted as a lane-level reorder/move.
+     * In group mode, card-target / group-target are prioritised for
+     * grouping operations.
+     */
+    function makeArgs(droppables: Array<{ id: string | number }>) {
+      // Minimal CollisionDetectionArgs stub — we mock pointerWithin via the
+      // module's internal call. Since we cannot easily mock pointerWithin
+      // without spying on @dnd-kit, we instead test the factory by feeding
+      // pre-baked collisions through the pure helpers it composes.
+      // (Wave 1 tests already cover prioritiseCardOrGroupCollisions and
+      // filterOutCardOrGroupCollisions individually.)
+      return droppables;
+    }
+
+    it('sort mode factory produces a function', () => {
+      const fn = buildKanbanCollisionDetection('sort');
+      expect(typeof fn).toBe('function');
     });
 
-    it('accepts custom centerRatio (narrower center band)', () => {
-      // centerRatio=0.2 means middle 20% only is grouping zone.
-      // Card top=100, height=80 → center = [132, 148]
-      const droppableRects = new Map<string | number, { top: number; height: number }>([
-        ['card-target-100', { top: 100, height: 80 }],
+    it('group mode factory produces a function', () => {
+      const fn = buildKanbanCollisionDetection('group');
+      expect(typeof fn).toBe('function');
+    });
+
+    it('sort mode + filter helper drops card/group targets entirely', () => {
+      // Equivalent to what the sort-mode factory does internally with
+      // its pointerWithin output.
+      const collisions = makeArgs([
+        { id: 'milestone-1' },
+        { id: 'card-target-100' },
       ]);
-      const collisions = [makeCollision('card-target-100')];
-      // Pointer at y=130 — outside center (below threshold)
-      expect(
-        filterCardTargetsByPointerZone(collisions, droppableRects, 130, 0.2),
-      ).toEqual([]);
-      // Pointer at y=140 — inside center
-      expect(
-        filterCardTargetsByPointerZone(collisions, droppableRects, 140, 0.2),
-      ).toEqual(collisions);
+      expect(filterOutCardOrGroupCollisions(collisions)).toEqual([
+        { id: 'milestone-1' },
+      ]);
+    });
+
+    it('group mode + prioritise helper keeps card/group targets only', () => {
+      const collisions = makeArgs([
+        { id: 'milestone-1' },
+        { id: 'card-target-100' },
+      ]);
+      expect(prioritiseCardOrGroupCollisions(collisions)).toEqual([
+        { id: 'card-target-100' },
+      ]);
     });
   });
 });

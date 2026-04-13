@@ -1,7 +1,12 @@
 import { useDroppable } from '@dnd-kit/core';
-import { SortableContext, type SortingStrategy } from '@dnd-kit/sortable';
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  type SortingStrategy,
+} from '@dnd-kit/sortable';
 import type { BacklogIssue } from '../../types/backlog';
 import type { GroupSlot, GroupId } from '../../types/group';
+import type { UiMode } from '../../stores/uiModeStore';
 import { computeMemberBreakdown } from '../../utils/memberBreakdown';
 import { LaneHeader } from '../LaneHeader/LaneHeader';
 import { IssueCard } from '../IssueCard/IssueCard';
@@ -31,6 +36,13 @@ interface LaneProps {
   onExpand?: (groupId: GroupId, rect: DOMRect) => void;
   /** Phase 9: 現在展開中のグループ id（aria-expanded 用） */
   expandedGroupId?: GroupId | null;
+  /**
+   * Phase 9: UI 操作モード。
+   * - `'sort'`  : verticalListSortingStrategy（背景カードがシフトする並べ替えプレビュー）
+   * - `'group'` : noShiftSortingStrategy（背景カードは動かない）
+   * 省略時は 'sort'。
+   */
+  uiMode?: UiMode;
 }
 
 function isGroupSlot(item: BacklogIssue | GroupSlot): item is GroupSlot {
@@ -58,6 +70,7 @@ export function Lane({
   hiddenCount = 0,
   onExpand,
   expandedGroupId = null,
+  uiMode = 'sort',
 }: LaneProps) {
   const { setNodeRef } = useDroppable({ id: laneId });
 
@@ -93,7 +106,12 @@ export function Lane({
         issueCount={issueCount}
         memberBreakdown={memberBreakdown}
       />
-      <SortableContext items={sortableIds} strategy={noShiftSortingStrategy}>
+      <SortableContext
+        items={sortableIds}
+        strategy={
+          uiMode === 'sort' ? verticalListSortingStrategy : noShiftSortingStrategy
+        }
+      >
         <div className={styles.cardList}>
           {items.length === 0 ? (
             hiddenCount > 0 ? (
