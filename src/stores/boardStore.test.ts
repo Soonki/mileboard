@@ -951,3 +951,296 @@ describe('bulkMoveGroup', () => {
     expect(typeof callArg.onProgress).toBe('function');
   });
 });
+
+
+// --- Phase 10 Plan 03 (D-13 / D-14): boardRevision monotonic counter ---
+
+/**
+ * boardRevision contract (D-13, D-14, RESEARCH §boardStore.revision 増分統合戦略):
+ * - Initial value: 0
+ * - Incremented by +1 in exactly 6 sites (atomic set with data):
+ *     1. fetchBoard success
+ *     2. moveIssue optimistic update
+ *     3. moveIssue rollback (never backward)
+ *     4. bulkMoveGroup optimistic update
+ *     5. bulkMoveGroup all-failure rollback
+ *     6. bulkMoveGroup partial-failure rollback
+ * - Monotonic invariant: never decreases across any sequence of operations
+ * - reset() resets revision to 0 (test isolation — production never calls reset)
+ */
+describe('boardRevision', () => {
+  beforeEach(() => {
+    // reset via public API so each test starts from a deterministic revision=0
+    useBoardStore.getState().reset();
+    vi.clearAllMocks();
+
+    mockUseSettingsStore.getState.mockReturnValue({
+      settings: mockSettings,
+    } as ReturnType<typeof useSettingsStore.getState>);
+    // Reset shared mock group registry between tests
+    for (const key of Object.keys(mockGroups)) delete mockGroups[key];
+  });
+
+  // --- initial state ---
+
+  describe('initial state', () => {
+    it('is 0 in a freshly reset store', () => {
+      expect(useBoardStore.getState().revision).toBe(0);
+    });
+
+    it('is declared as a number on the store state', () => {
+      expect(typeof useBoardStore.getState().revision).toBe('number');
+    });
+  });
+
+  // --- fetchBoard ---
+
+  describe('fetchBoard', () => {
+    it('increments revision by +1 on successful fetch', async () => {
+      mockFetchBoardData.mockResolvedValueOnce(makeBoardData());
+      const before = useBoardStore.getState().revision;
+
+      await useBoardStore.getState().fetchBoard();
+
+      expect(useBoardStore.getState().revision).toBe(before + 1);
+    });
+
+    it('does NOT increment revision on fetch error (data did not change)', async () => {
+      mockFetchBoardData.mockRejectedValueOnce('APIエラー');
+      const before = useBoardStore.getState().revision;
+
+      await useBoardStore.getState().fetchBoard();
+
+      expect(useBoardStore.getState().revision).toBe(before);
+    });
+
+    it('increments revision by +1 on reload (loaded → loaded path)', async () => {
+      // First fetch: 0 -> 1
+      mockFetchBoardData.mockResolvedValueOnce(makeBoardData());
+      await useBoardStore.getState().fetchBoard();
+      expect(useBoardStore.getState().revision).toBe(1);
+
+      // Second fetch (reload): 1 -> 2
+      mockFetchBoardData.mockResolvedValueOnce(makeBoardData());
+      await useBoardStore.getState().fetchBoard();
+      expect(useBoardStore.getState().revision).toBe(2);
+    });
+  });
+
+  // --- moveIssue ---
+
+  describe('moveIssue', () => {
+    it('increments revision by +1 on optimistic update (success in-flight)', () => {
+      const boardData = makeBoardData();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 5 });
+      // Pending promise so rollback never fires
+      mockUpdateIssueMilestone.mockReturnValue(new Promise(() => {}));
+
+      useBoardStore.getState().moveIssue(100, 'milestone-10', 'milestone-20');
+
+      expect(useBoardStore.getState().revision).toBe(6);
+    });
+
+    it('increments revision by +2 when API fails (optimistic +1 then rollback +1, never backward)', async () => {
+      const boardData = makeBoardData();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 5 });
+      mockUpdateIssueMilestone.mockRejectedValue('api error');
+
+      useBoardStore.getState().moveIssue(100, 'milestone-10', 'milestone-20');
+
+      // After rollback: should be 7, NOT back to 5
+      await vi.waitFor(() => {
+        expect(useBoardStore.getState().revision).toBe(7);
+      });
+    });
+
+    it('does NOT increment revision when data is null (guard)', () => {
+      useBoardStore.setState({ status: 'idle', data: null, revision: 3 });
+
+      useBoardStore.getState().moveIssue(100, 'milestone-10', 'milestone-20');
+
+      expect(useBoardStore.getState().revision).toBe(3);
+    });
+
+    it('does NOT increment revision when issue not found (guard)', () => {
+      const boardData = makeBoardData();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 3 });
+
+      useBoardStore.getState().moveIssue(999, 'milestone-10', 'milestone-20');
+
+      expect(useBoardStore.getState().revision).toBe(3);
+    });
+  });
+
+  // --- bulkMoveGroup ---
+
+  describe('bulkMoveGroup', () => {
+    it('increments revision by +1 on all-success path (optimistic only)', async () => {
+      const boardData = makeBoardDataForBulk();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 10 });
+      setupGroup([100, 101, 102], 'milestone-10');
+      mockBulkMoveIssues.mockResolvedValue({
+        succeeded: [
+          makeIssue(100, 'TEST-100'),
+          makeIssue(101, 'TEST-101'),
+          makeIssue(102, 'TEST-102'),
+        ],
+        failed: [],
+      });
+
+      await useBoardStore
+        .getState()
+        .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+      // Optimistic +1 only (success path does not re-set data)
+      expect(useBoardStore.getState().revision).toBe(11);
+    });
+
+    it('increments revision by +2 on all-failure rollback (optimistic +1, rollback +1)', async () => {
+      const boardData = makeBoardDataForBulk();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 10 });
+      setupGroup([100, 101, 102], 'milestone-10');
+      mockBulkMoveIssues.mockResolvedValue({
+        succeeded: [],
+        failed: [
+          { issue: makeIssue(100, 'TEST-100'), error: new Error('e1') },
+          { issue: makeIssue(101, 'TEST-101'), error: new Error('e2') },
+          { issue: makeIssue(102, 'TEST-102'), error: new Error('e3') },
+        ],
+      });
+
+      await useBoardStore
+        .getState()
+        .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+      // Optimistic (+1) + all-failure rollback (+1) = +2
+      expect(useBoardStore.getState().revision).toBe(12);
+    });
+
+    it('increments revision by +2 on partial-failure rollback (optimistic +1, partial rollback +1)', async () => {
+      const boardData = makeBoardDataForBulk();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 10 });
+      setupGroup([100, 101, 102], 'milestone-10');
+      mockBulkMoveIssues.mockResolvedValue({
+        succeeded: [makeIssue(100, 'TEST-100'), makeIssue(102, 'TEST-102')],
+        failed: [{ issue: makeIssue(101, 'TEST-101'), error: new Error('e2') }],
+      });
+
+      await useBoardStore
+        .getState()
+        .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+
+      // Optimistic (+1) + partial-failure rollback (+1) = +2
+      expect(useBoardStore.getState().revision).toBe(12);
+    });
+  });
+
+  // --- monotonic invariant ---
+
+  describe('monotonic invariant', () => {
+    it('never decreases across a mixed sequence of operations', async () => {
+      // Seed: populate board via fetchBoard (revision 0 -> 1)
+      mockFetchBoardData.mockResolvedValueOnce(makeBoardData());
+      await useBoardStore.getState().fetchBoard();
+
+      let prev = useBoardStore.getState().revision;
+      expect(prev).toBe(1);
+
+      // Op 1: moveIssue success (pending promise to keep data stable)
+      mockUpdateIssueMilestone.mockReturnValueOnce(new Promise(() => {}));
+      useBoardStore.getState().moveIssue(100, 'milestone-10', 'milestone-20');
+      let current = useBoardStore.getState().revision;
+      expect(current).toBeGreaterThanOrEqual(prev);
+      prev = current;
+
+      // Op 2: moveIssue failure (rollback)
+      mockUpdateIssueMilestone.mockRejectedValueOnce('api error');
+      useBoardStore.getState().moveIssue(101, 'milestone-10', 'milestone-20');
+      await vi.waitFor(() => {
+        // Ensure rollback has applied
+        expect(useBoardStore.getState().revision).toBeGreaterThan(prev);
+      });
+      current = useBoardStore.getState().revision;
+      expect(current).toBeGreaterThanOrEqual(prev);
+      prev = current;
+
+      // Op 3: fetchBoard reload
+      mockFetchBoardData.mockResolvedValueOnce(makeBoardData());
+      await useBoardStore.getState().fetchBoard();
+      current = useBoardStore.getState().revision;
+      expect(current).toBeGreaterThanOrEqual(prev);
+      prev = current;
+
+      // Op 4: bulkMoveGroup full success
+      setupGroup([100, 101], 'milestone-10');
+      mockBulkMoveIssues.mockResolvedValueOnce({
+        succeeded: [makeIssue(100, 'TEST-1'), makeIssue(101, 'TEST-2')],
+        failed: [],
+      });
+      await useBoardStore
+        .getState()
+        .bulkMoveGroup(TEST_GROUP_ID, 'milestone-10', 'milestone-20');
+      current = useBoardStore.getState().revision;
+      expect(current).toBeGreaterThanOrEqual(prev);
+      prev = current;
+
+      // Op 5: bulkMoveGroup all failure
+      setupGroup([200], 'milestone-20');
+      mockBulkMoveIssues.mockResolvedValueOnce({
+        succeeded: [],
+        failed: [{ issue: makeIssue(200, 'TEST-3'), error: new Error('x') }],
+      });
+      await useBoardStore
+        .getState()
+        .bulkMoveGroup(TEST_GROUP_ID, 'milestone-20', 'milestone-10');
+      current = useBoardStore.getState().revision;
+      expect(current).toBeGreaterThanOrEqual(prev);
+      prev = current;
+    });
+  });
+
+  // --- reset ---
+
+  describe('reset()', () => {
+    it('resets revision to 0', () => {
+      useBoardStore.setState({ revision: 42 });
+      expect(useBoardStore.getState().revision).toBe(42);
+
+      useBoardStore.getState().reset();
+
+      expect(useBoardStore.getState().revision).toBe(0);
+    });
+  });
+
+  // --- atomic set (Pitfall 3 regression guard) ---
+
+  describe('atomic set (Pitfall 3)', () => {
+    it('updates data and revision in a single set() call during moveIssue optimistic', () => {
+      const boardData = makeBoardData();
+      useBoardStore.setState({ status: 'loaded', data: boardData, revision: 5 });
+      mockUpdateIssueMilestone.mockReturnValue(new Promise(() => {}));
+
+      // Subscribe and capture every state transition; at no point should the
+      // subscriber observe "new data + old revision" or "old data + new revision".
+      const observed: Array<{ revision: number; issueInSrc: boolean }> = [];
+      const unsubscribe = useBoardStore.subscribe((state) => {
+        const srcLane = state.data?.milestones.find(
+          (m) => m.milestone.id === 10,
+        );
+        observed.push({
+          revision: state.revision,
+          issueInSrc: !!srcLane?.issues.find((i) => i.id === 100),
+        });
+      });
+
+      useBoardStore.getState().moveIssue(100, 'milestone-10', 'milestone-20');
+      unsubscribe();
+
+      // Find the transition where issueInSrc flipped false (optimistic applied)
+      const optimisticFrame = observed.find((f) => f.issueInSrc === false);
+      expect(optimisticFrame).toBeDefined();
+      // At that very frame, revision must already be 6 — not stale 5
+      expect(optimisticFrame!.revision).toBe(6);
+    });
+  });
+});
