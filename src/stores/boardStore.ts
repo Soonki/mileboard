@@ -16,6 +16,30 @@ interface BoardStoreState {
   data: BoardData | null;
   error: string | null;
   isReloading: boolean;
+  /**
+   * Phase 10 D-13 / D-14: Monotonic counter of boardStore.data mutations.
+   *
+   * Incremented by +1 in exactly 6 sites (always atomic with the corresponding
+   * `data` update in a single `set()` call — see Pitfall 3):
+   *   1. fetchBoard success
+   *   2. moveIssue optimistic update
+   *   3. moveIssue rollback (never backward)
+   *   4. bulkMoveGroup optimistic update
+   *   5. bulkMoveGroup all-failure rollback
+   *   6. bulkMoveGroup partial-failure rollback
+   *
+   * **Invariant:** never decreases within a session. Rollbacks also advance
+   * the counter so that Phase 13 `expectedRevision` optimistic locking cannot
+   * be tricked by a `R5 → R4 → R5` same-value loop.
+   *
+   * Session-scoped: not persisted by plugin-store. `reset()` resets to 0
+   * (planner decision: test isolation priority; production never calls
+   * `reset()`).
+   *
+   * Consumed by Phase 10 `snapshotBuilder` (`envelope.boardRevision`) and
+   * Phase 13 `apply_rule` (`expectedRevision` optimistic lock).
+   */
+  revision: number;
 
   fetchBoard: () => Promise<void>;
   moveIssue: (issueId: number, fromLaneId: string, toLaneId: string) => void;
@@ -132,6 +156,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
   data: null,
   error: null,
   isReloading: false,
+  revision: 0, // Phase 10 D-13: monotonic counter, session-scoped (not persisted)
 
   fetchBoard: async () => {
     const { settings } = useSettingsStore.getState();
@@ -150,7 +175,13 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
         settings.projectKey,
         settings.milestonePrefix,
       );
-      set({ status: 'loaded', data, error: null, isReloading: false });
+      set({
+        status: 'loaded',
+        data,
+        error: null,
+        isReloading: false,
+        revision: get().revision + 1, // D-14 site #1: fetchBoard success
+      });
 
       // Phase 9 Plan 04 (Q3): pruneStaleMembers ハウスキーピング。
       // 直前の fetch 結果から消えた issue をグループから除去する。
@@ -181,7 +212,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
 
     // 2. Optimistic update (immutable)
     const updatedData = applyMoveIssue(snapshot, issueId, fromLaneId, toLaneId);
-    set({ data: updatedData });
+    set({ data: updatedData, revision: get().revision + 1 }); // D-14 site #2: moveIssue optimistic
 
     // 3. API call params
     const newMilestoneId = parseMilestoneIdFromLaneId(toLaneId);
@@ -196,7 +227,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
       settings.milestonePrefix,
     ).catch((error: unknown) => {
       // Rollback to snapshot
-      set({ data: snapshot });
+      set({ data: snapshot, revision: get().revision + 1 }); // D-14 site #3: moveIssue rollback (never backward)
       const message =
         typeof error === 'string'
           ? `マイルストーンの変更に失敗しました: ${error}`
@@ -231,7 +262,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
         toLaneId,
       );
     }
-    set({ data: optimisticData });
+    set({ data: optimisticData, revision: get().revision + 1 }); // D-14 site #4: bulkMoveGroup optimistic
 
     // 5. groupStore laneId update (immediate, before API)
     useGroupStore.getState().moveGroup(groupId, toLaneId);
@@ -267,7 +298,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
 
     if (result.succeeded.length === 0) {
       // All failure: full rollback to snapshot
-      set({ data: snapshot });
+      set({ data: snapshot, revision: get().revision + 1 }); // D-14 site #5: bulkMoveGroup all-failure rollback (monotonic)
       useGroupStore.getState().moveGroup(groupId, fromLaneId);
       toast.error('移動に失敗しました。再度お試しください', { id: toastId });
       return;
@@ -279,7 +310,7 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
     for (const { issue } of result.failed) {
       rollbackData = applyMoveIssue(rollbackData, issue.id, toLaneId, fromLaneId);
     }
-    set({ data: rollbackData });
+    set({ data: rollbackData, revision: get().revision + 1 }); // D-14 site #6: bulkMoveGroup partial-failure rollback (monotonic)
 
     // Remove failed members from the group (they become standalone cards in fromLane)
     for (const { issue } of result.failed) {
@@ -294,6 +325,14 @@ export const useBoardStore = create<BoardStoreState>()((set, get) => ({
   },
 
   reset: () => {
-    set({ status: 'idle', data: null, error: null, isReloading: false });
+    // Plan 10-03 planner decision: reset() zeroes revision for test isolation.
+    // Production code never calls reset() — monotonic invariant holds in prod.
+    set({
+      status: 'idle',
+      data: null,
+      error: null,
+      isReloading: false,
+      revision: 0,
+    });
   },
 }));
