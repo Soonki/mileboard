@@ -233,7 +233,7 @@ describe('makeDefaultPath', () => {
   it('Test 17b: pads single-digit month/day/hour/minute correctly', () => {
     const fixedNow = new Date(2026, 0, 5, 3, 7, 0); // Jan 5 03:07
 
-    const path = makeDefaultPath('KEY', 'md', fixedNow);
+    const path = makeDefaultPath('KEY', 'markdown', fixedNow);
 
     expect(path).toBe('mileboard-snapshot-KEY-2026-01-05-0307.md');
   });
