@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import '@testing-library/jest-dom';
+import { toast } from 'sonner';
 import {
   Board,
   prioritiseCardOrGroupCollisions,
   filterOutCardOrGroupCollisions,
   buildKanbanCollisionDetection,
 } from './Board';
+import { buildSnapshot } from '../../utils/snapshotBuilder';
+import { saveSnapshot } from '../../services/snapshotFile';
 import type { BoardData } from '../../types/board';
 import type { BacklogIssue } from '../../types/backlog';
 
@@ -42,16 +45,34 @@ vi.mock('../../stores/boardStore', () => ({
   findIssueInBoardData: vi.fn(() => null),
 }));
 
+// Phase 10 Plan 08: settings は shortcut handler でも getState() 経由で参照されるため
+// milestonePrefix 以外に projectKey も含めた shape を返す必要がある。
+const mockSettingsState = {
+  settings: {
+    hostUrl: 'https://example.backlog.com',
+    apiKey: 'test-key',
+    projectKey: 'MILEBOARD',
+    milestonePrefix: 'Sprint',
+  },
+};
+
 vi.mock('../../stores/settingsStore', () => ({
-  useSettingsStore: vi.fn(
-    (selector: (s: { settings: { milestonePrefix: string } }) => string) =>
-      selector({ settings: { milestonePrefix: 'Sprint' } }),
+  useSettingsStore: Object.assign(
+    (selector: (s: typeof mockSettingsState) => unknown) =>
+      selector(mockSettingsState),
+    {
+      getState: () => mockSettingsState,
+    },
   ),
 }));
 
 vi.mock('../../stores/filterStore', () => ({
-  useFilterStore: (selector: (s: MockFilterState) => unknown) =>
-    selector(mockFilterState),
+  useFilterStore: Object.assign(
+    (selector: (s: MockFilterState) => unknown) => selector(mockFilterState),
+    {
+      getState: () => mockFilterState,
+    },
+  ),
 }));
 
 const mockSortState: { field: string; direction: string; setField: ReturnType<typeof vi.fn>; toggleDirection: ReturnType<typeof vi.fn>; loadFromStorage: ReturnType<typeof vi.fn> } = {
@@ -63,8 +84,12 @@ const mockSortState: { field: string; direction: string; setField: ReturnType<ty
 };
 
 vi.mock('../../stores/sortStore', () => ({
-  useSortStore: (selector: (s: typeof mockSortState) => unknown) =>
-    selector(mockSortState),
+  useSortStore: Object.assign(
+    (selector: (s: typeof mockSortState) => unknown) => selector(mockSortState),
+    {
+      getState: () => mockSortState,
+    },
+  ),
 }));
 
 vi.mock('../../utils/sortUtils', () => ({
@@ -125,6 +150,30 @@ vi.mock('../../utils/groupUtils', () => ({
   ),
   rejectMultiMilestoneMember: vi.fn(() => false),
   pruneStaleMembers: vi.fn((g: unknown) => g),
+}));
+
+// Phase 10 Plan 08: uiModeStore は shortcut handler で getState() 経由で参照される
+const mockUiModeState = {
+  mode: 'sort' as const,
+  toggleMode: vi.fn(),
+};
+
+vi.mock('../../stores/uiModeStore', () => ({
+  useUiModeStore: Object.assign(
+    (selector: (s: typeof mockUiModeState) => unknown) => selector(mockUiModeState),
+    {
+      getState: () => mockUiModeState,
+    },
+  ),
+}));
+
+// Phase 10 Plan 08: buildSnapshot / saveSnapshot を mock (Ctrl+Shift+E 統合テストで使用)
+vi.mock('../../utils/snapshotBuilder', () => ({
+  buildSnapshot: vi.fn(() => 'mock-snapshot-content'),
+}));
+
+vi.mock('../../services/snapshotFile', () => ({
+  saveSnapshot: vi.fn(),
 }));
 
 vi.mock('../Lane/Lane', () => ({
@@ -1038,6 +1087,266 @@ describe('Board', () => {
       expect(prioritiseCardOrGroupCollisions(collisions)).toEqual([
         { id: 'card-target-100' },
       ]);
+    });
+  });
+
+  /**
+   * Phase 10 Plan 08: Ctrl+Shift+E / Cmd+Shift+E で JSON 直保存が起動する
+   * integration test。ExportButton の dropdown を経由せず、Board.tsx の
+   * useEffect 内の window keydown listener から直接 buildSnapshot →
+   * saveSnapshot が呼ばれる経路を検証する。
+   *
+   * - data === null / status === 'loading' は silent no-op
+   * - Windows (ctrlKey) / Mac (metaKey) 両対応
+   * - uppercase 'E' / lowercase 'e' 両対応 (Research Pitfall 8)
+   * - error 時は toast.error が和訳メッセージで呼ばれる
+   * - cancelled 時は toast.error 未呼び出し (silent)
+   */
+  describe('Ctrl+Shift+E shortcut', () => {
+    const loadedBoardData: BoardData = {
+      milestones: [
+        {
+          milestone: {
+            id: 1,
+            projectId: 1,
+            name: 'Sprint 2504',
+            description: '',
+            startDate: '2025-04-01',
+            releaseDueDate: '2025-04-30',
+            archived: false,
+            displayOrder: 0,
+          },
+          issues: [],
+        },
+      ],
+      unassignedIssues: [],
+    };
+
+    // Let microtasks drain so the async keydown handler's `await saveSnapshot()`
+    // resolves before the assertion. Two ticks cover `await` + `.then` chains.
+    async function flushPromises(): Promise<void> {
+      await Promise.resolve();
+      await Promise.resolve();
+    }
+
+    beforeEach(() => {
+      vi.mocked(saveSnapshot).mockReset();
+      vi.mocked(buildSnapshot).mockClear();
+      vi.mocked(buildSnapshot).mockReturnValue('mock-snapshot-content');
+      vi.mocked(toast.error).mockClear();
+    });
+
+    it('calls saveSnapshot with format=json when Ctrl+Shift+E is pressed (data loaded)', async () => {
+      vi.mocked(saveSnapshot).mockResolvedValueOnce({
+        success: true,
+        path: '/mock/path/snapshot.json',
+      });
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: loadedBoardData,
+        revision: 3,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(saveSnapshot).toHaveBeenCalledTimes(1);
+      expect(saveSnapshot).toHaveBeenCalledWith(
+        'mock-snapshot-content',
+        'json',
+        'MILEBOARD',
+      );
+      expect(buildSnapshot).toHaveBeenCalledWith(
+        expect.objectContaining({
+          boardData: loadedBoardData,
+          boardRevision: 3,
+          milestonePrefix: 'Sprint',
+          projectKey: 'MILEBOARD',
+          uiMode: 'sort',
+        }),
+        'json',
+      );
+    });
+
+    it('is silent no-op when data === null (disabled state)', async () => {
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'idle',
+        data: null,
+        revision: 0,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(saveSnapshot).not.toHaveBeenCalled();
+      expect(buildSnapshot).not.toHaveBeenCalled();
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('is silent no-op when status === loading (disabled state)', async () => {
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loading',
+        data: null,
+        revision: 0,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(saveSnapshot).not.toHaveBeenCalled();
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('responds to Cmd+Shift+E on Mac (metaKey)', async () => {
+      vi.mocked(saveSnapshot).mockResolvedValueOnce({
+        success: true,
+        path: '/mock/path/snapshot.json',
+      });
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: loadedBoardData,
+        revision: 1,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        metaKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(saveSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it("accepts lowercase 'e' as well as uppercase 'E' (Pitfall 8)", async () => {
+      vi.mocked(saveSnapshot).mockResolvedValueOnce({
+        success: true,
+        path: '/mock/path/snapshot.json',
+      });
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: loadedBoardData,
+        revision: 1,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'e',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(saveSnapshot).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows error toast when saveSnapshot returns error', async () => {
+      vi.mocked(saveSnapshot).mockResolvedValueOnce({
+        success: false,
+        reason: 'error',
+        error: 'Disk full',
+      });
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: loadedBoardData,
+        revision: 1,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(toast.error).toHaveBeenCalledTimes(1);
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('スナップショットの保存に失敗しました'),
+      );
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining('Disk full'),
+      );
+    });
+
+    it('does NOT call toast.error when saveSnapshot returns cancelled (silent)', async () => {
+      vi.mocked(saveSnapshot).mockResolvedValueOnce({
+        success: false,
+        reason: 'cancelled',
+      });
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: loadedBoardData,
+        revision: 1,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: true,
+      });
+      await flushPromises();
+
+      expect(toast.error).not.toHaveBeenCalled();
+    });
+
+    it('does NOT trigger on Ctrl+E alone (without Shift)', async () => {
+      mockStoreState = {
+        ...mockStoreState,
+        status: 'loaded',
+        data: loadedBoardData,
+        revision: 1,
+      };
+
+      render(<Board />);
+
+      fireEvent.keyDown(window, {
+        key: 'E',
+        code: 'KeyE',
+        ctrlKey: true,
+        shiftKey: false,
+      });
+      await flushPromises();
+
+      expect(saveSnapshot).not.toHaveBeenCalled();
     });
   });
 });

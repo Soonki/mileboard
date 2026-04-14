@@ -14,7 +14,7 @@ import type {
   DragOverEvent,
   CollisionDetection,
 } from '@dnd-kit/core';
-import { Toaster } from 'sonner';
+import { Toaster, toast } from 'sonner';
 import { useBoardStore, findIssueInBoardData } from '../../stores/boardStore';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useFilterStore } from '../../stores/filterStore';
@@ -28,6 +28,9 @@ import {
   findGroupSlotInView,
   type ComposedView,
 } from '../../utils/viewComposer';
+// Phase 10 Plan 08: Ctrl+Shift+E JSON 直保存のため snapshotBuilder / snapshotFile を import
+import { buildSnapshot } from '../../utils/snapshotBuilder';
+import { saveSnapshot } from '../../services/snapshotFile';
 import type { BacklogIssue } from '../../types/backlog';
 import type { BoardData } from '../../types/board';
 import type { ReorderEntry, ReorderMap } from '../../types/reorder';
@@ -545,6 +548,64 @@ export function Board() {
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [toggleUiMode]);
+
+  // Phase 10 D-04: Ctrl+Shift+E (Cmd+Shift+E on Mac) で JSON 直接保存。
+  // dropdown を開かず、ExportButton と同じ saveSnapshot パスを呼び出す。
+  // disabled 条件 (data === null || status === 'loading') のときは silent no-op (UI-SPEC)。
+  // 各 store を getState() で毎回 snapshot するため deps は空 (keydown 時点の最新値)。
+  useEffect(() => {
+    const handler = async (e: KeyboardEvent): Promise<void> => {
+      if (
+        !((e.ctrlKey || e.metaKey) && e.shiftKey && (e.key === 'E' || e.key === 'e'))
+      ) {
+        return;
+      }
+      e.preventDefault();
+
+      // UI-SPEC: silent no-op when disabled (ExportButton の disabled 条件と同一)
+      const boardState = useBoardStore.getState();
+      if (boardState.data === null || boardState.status === 'loading') {
+        return;
+      }
+
+      // keydown 時点の全 store state を snapshot
+      const settings = useSettingsStore.getState().settings;
+      const filterState = useFilterStore.getState();
+      const sortState = useSortStore.getState();
+      const reorderState = useReorderStore.getState();
+      const groupState = useGroupStore.getState();
+      const uiModeState = useUiModeStore.getState();
+
+      const content = buildSnapshot(
+        {
+          boardData: boardState.data,
+          boardRevision: boardState.revision,
+          filter: {
+            statusIds: filterState.statusIds,
+            assigneeIds: filterState.assigneeIds,
+            categoryIds: filterState.categoryIds,
+          },
+          sortField: sortState.field,
+          sortDirection: sortState.direction,
+          orderMap: reorderState.orderMap,
+          groups: groupState.groups,
+          uiMode: uiModeState.mode,
+          milestonePrefix: settings.milestonePrefix,
+          projectKey: settings.projectKey,
+        },
+        'json',
+      );
+
+      const result = await saveSnapshot(content, 'json', settings.projectKey);
+
+      if (!result.success && result.reason === 'error') {
+        toast.error(`スナップショットの保存に失敗しました: ${result.error}`);
+      }
+      // silent on success / cancelled (D-06)
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   /**
    * Plan 04: GroupCard クリック時にレーンから受け取るコールバック。
