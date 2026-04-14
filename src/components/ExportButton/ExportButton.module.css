@@ -1,0 +1,71 @@
+.container {
+  position: relative;
+  display: inline-block;
+}
+
+.trigger {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-input);
+  color: var(--color-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.trigger:hover:not(:disabled) {
+  background: var(--color-bg);
+  color: var(--color-accent);
+}
+
+.trigger[aria-expanded='true'] {
+  background: var(--color-bg);
+  color: var(--color-accent);
+}
+
+.trigger:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+.trigger:disabled {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.panel {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-xs);
+  min-width: 180px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-input);
+  box-shadow: var(--shadow-dropdown);
+  z-index: 20;
+  padding: var(--space-xs) 0;
+  outline: none;
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity var(--transition-fast), transform var(--transition-fast);
+}
+
+.option {
+  padding: var(--space-xs) var(--space-sm);
+  font-size: var(--font-size-label);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.option:hover,
+.optionFocused {
+  background: var(--color-dropdown-hover);
+}
