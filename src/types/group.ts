@@ -37,3 +37,13 @@ export interface GroupSlot {
   totalMembers: number;
   badgeText: string;
 }
+
+/**
+ * レーン表示項目が GroupSlot かどうかを判別する型ガード。
+ * view composer / snapshotBuilder / Lane 描画の分岐で共有する。
+ */
+export function isGroupSlotItem(
+  item: BacklogIssue | GroupSlot,
+): item is GroupSlot {
+  return 'kind' in item && (item as GroupSlot).kind === 'group';
+}
