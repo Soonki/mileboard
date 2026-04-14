@@ -20,6 +20,21 @@ vi.mock('@tauri-apps/plugin-opener', () => ({
   openUrl: vi.fn().mockResolvedValue(undefined),
 }));
 
+vi.mock('@tauri-apps/plugin-dialog', () => ({
+  save: vi.fn().mockResolvedValue('/mock/path/snapshot.json'),
+}));
+
+vi.mock('@tauri-apps/plugin-fs', () => ({
+  writeTextFile: vi.fn().mockResolvedValue(undefined),
+  BaseDirectory: {
+    Home: 0,
+    Document: 1,
+    Download: 2,
+    Desktop: 3,
+    AppData: 4,
+  },
+}));
+
 vi.mock('sonner', () => ({
   toast: {
     error: vi.fn(),
