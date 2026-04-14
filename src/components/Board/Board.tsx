@@ -22,16 +22,14 @@ import { useSortStore } from '../../stores/sortStore';
 import { useReorderStore } from '../../stores/reorderStore';
 import { useGroupStore } from '../../stores/groupStore';
 import { useUiModeStore, type UiMode } from '../../stores/uiModeStore';
-import { applyFilters } from '../../utils/filterUtils';
-import { applySortToIssues } from '../../utils/sortUtils';
-import { applyCustomOrder } from '../../utils/reorderUtils';
+import { rejectMultiMilestoneMember } from '../../utils/groupUtils';
 import {
-  applyGroupExpansion,
-  rejectMultiMilestoneMember,
-} from '../../utils/groupUtils';
+  composeView,
+  findGroupSlotInView,
+  type ComposedView,
+} from '../../utils/viewComposer';
 import type { BacklogIssue } from '../../types/backlog';
 import type { BoardData } from '../../types/board';
-import type { FilterState } from '../../types/filter';
 import type { ReorderEntry, ReorderMap } from '../../types/reorder';
 import type { GroupId, GroupSlot } from '../../types/group';
 import { Lane } from '../Lane/Lane';
@@ -40,44 +38,6 @@ import { BoardSkeleton } from '../BoardSkeleton/BoardSkeleton';
 import { BoardError } from '../BoardError/BoardError';
 import { GroupPopover } from '../GroupPopover/GroupPopover';
 import styles from './Board.module.css';
-
-/**
- * Phase 9 Plan 04: filteredAndSortedView の型エイリアス。
- * Board 内部で findGroupSlotInView ヘルパーが消費する。
- */
-interface FilteredView {
-  milestones: Array<{
-    milestone: { id: number; name: string };
-    items: Array<BacklogIssue | GroupSlot>;
-    hiddenCount: number;
-  }>;
-  unassigned: {
-    items: Array<BacklogIssue | GroupSlot>;
-    hiddenCount: number;
-  };
-}
-
-/**
- * Plan 04: filteredAndSortedView から指定 groupId の GroupSlot を見つけて返す。
- * applyGroupExpansion 後の view を全レーン走査するため O(lanes * items)。
- */
-function findGroupSlotInView(
-  view: FilteredView,
-  groupId: GroupId,
-): GroupSlot | null {
-  const allLanes: Array<Array<BacklogIssue | GroupSlot>> = [
-    view.unassigned.items,
-    ...view.milestones.map((m) => m.items),
-  ];
-  for (const items of allLanes) {
-    for (const item of items) {
-      if ('kind' in item && item.kind === 'group' && item.group.id === groupId) {
-        return item;
-      }
-    }
-  }
-  return null;
-}
 
 /**
  * Find which lane contains an item by its ID.
@@ -490,69 +450,19 @@ export function Board() {
   const uiMode = useUiModeStore((s) => s.mode);
   const toggleUiMode = useUiModeStore((s) => s.toggleMode);
 
-  // D-09: dataはraw unfiltered、ビュー層でのみフィルタ・ソート・グループ展開を適用
-  const filteredAndSortedView = useMemo(() => {
+  // Phase 10 D-16: view composition は src/utils/viewComposer.ts に抽出済み。
+  // Board.tsx と snapshotBuilder の両方が同じ composeView を使うことで、
+  // 「画面と snapshot で view が違う」バグを構造的に防ぐ。
+  const filteredAndSortedView = useMemo((): ComposedView | null => {
     if (!data) return null;
-    const filters: FilterState = { statusIds, assigneeIds, categoryIds };
-    const hasFilters =
-      statusIds.size > 0 || assigneeIds.size > 0 || categoryIds.size > 0;
-
-    const unassignedFiltered = hasFilters
-      ? applyFilters(data.unassignedIssues, filters)
-      : data.unassignedIssues;
-    const unassignedSorted = applySortToIssues(
-      unassignedFiltered,
+    return composeView({
+      boardData: data,
+      filter: { statusIds, assigneeIds, categoryIds },
       sortField,
       sortDirection,
-    );
-    const unassignedOrdered =
-      sortField === 'none'
-        ? applyCustomOrder(unassignedSorted, orderMap['unassigned'] ?? [])
-        : unassignedSorted;
-    // Phase 9: applyGroupExpansion を unassigned パイプラインの末尾に追加
-    const unassignedExpansion = applyGroupExpansion(
-      unassignedOrdered,
-      data.unassignedIssues,
-      groupMap,
-      'unassigned',
-      orderMap['unassigned'] ?? [],
-    );
-
-    return {
-      milestones: data.milestones.map((mwi) => {
-        const filtered = hasFilters
-          ? applyFilters(mwi.issues, filters)
-          : mwi.issues;
-        const sorted = applySortToIssues(filtered, sortField, sortDirection);
-        const laneId = `milestone-${mwi.milestone.id}`;
-        const ordered =
-          sortField === 'none'
-            ? applyCustomOrder(sorted, orderMap[laneId] ?? [])
-            : sorted;
-        // Phase 9: applyGroupExpansion をミルストンパイプラインの末尾に追加
-        const expansion = applyGroupExpansion(
-          ordered,
-          mwi.issues,
-          groupMap,
-          laneId,
-          orderMap[laneId] ?? [],
-        );
-        return {
-          milestone: mwi.milestone,
-          items: expansion.items,
-          hiddenCount:
-            (hasFilters ? mwi.issues.length - filtered.length : 0) +
-            expansion.hiddenGroupCount,
-        };
-      }),
-      unassigned: {
-        items: unassignedExpansion.items,
-        hiddenCount:
-          (hasFilters
-            ? data.unassignedIssues.length - unassignedFiltered.length
-            : 0) + unassignedExpansion.hiddenGroupCount,
-      },
-    };
+      orderMap,
+      groups: groupMap,
+    });
   }, [
     data,
     statusIds,
