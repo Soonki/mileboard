@@ -83,6 +83,15 @@ Output (Windows):
 
 > **Unsigned builds:** Installers are not code-signed. On first run, Windows SmartScreen may show "Windows protected your PC" — click **More info → Run anyway**.
 
+## Releases
+
+Pre-built Windows installers are available on the [Releases page](https://github.com/Soonki/mileboard/releases).
+
+- **NSIS** (`.exe`): recommended for most users, installs to `%LOCALAPPDATA%\mileboard` without admin rights.
+- **MSI** (`.msi`): for enterprise deployment via GPO or `msiexec /quiet`.
+
+Releases are built automatically from git tags (`v*`) via [`.github/workflows/release.yml`](.github/workflows/release.yml).
+
 ## Architecture
 
 ```
@@ -159,3 +168,7 @@ npm run tauri:build:windows
 Windows 向けの NSIS (`.exe`) と MSI インストーラが `src-tauri/target/release/bundle/` 配下に生成されます。未署名のため、初回起動時に SmartScreen の警告が出たら「詳細情報」→「実行」をクリックしてください。
 
 MSI の生成には [WiX Toolset v3.x](https://wixtoolset.org/releases/) が事前にインストールされている必要があります。
+
+### リリース
+
+ビルド済み Windows インストーラは [Releases ページ](https://github.com/Soonki/mileboard/releases) から入手できます。NSIS (`.exe`) は管理者権限不要、MSI (`.msi`) は `msiexec /quiet` によるサイレント配布に対応します。未署名のため SmartScreen 警告は想定内です。リリースビルドは git tag (`v*`) のプッシュで [`.github/workflows/release.yml`](.github/workflows/release.yml) により自動生成されます。

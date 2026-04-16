@@ -70,3 +70,35 @@ cd src-tauri && cargo test
 - **tauriBridge:** All frontend-to-backend communication goes through `src/services/tauriBridge.ts`. Never call Tauri APIs directly from components
 - **Zustand stores:** `settingsStore` for connection config, `boardStore` for issues and milestones
 - **milestoneId[] preservation:** Backlog's PATCH API replaces the entire `milestoneId` array. When moving an issue, milestones outside the current prefix filter must be preserved
+
+## Release Procedure
+
+Releases are automated via [`.github/workflows/release.yml`](.github/workflows/release.yml). Pushing a tag matching `v*` (or manually dispatching the workflow) builds Windows NSIS + MSI installers and attaches them to a **draft** GitHub Release.
+
+### Releasing a new version
+
+1. **Bump the version in three files** (they must stay in sync — Tauri reads `tauri.conf.json` but the other two affect metadata / npm listing):
+   - `package.json` → `version`
+   - `src-tauri/Cargo.toml` → `[package] version`
+   - `src-tauri/tauri.conf.json` → `version`
+2. **Commit:** `chore: release v0.1.1`
+3. **Tag & push:**
+   ```bash
+   git tag v0.1.1
+   git push origin v0.1.1
+   ```
+4. **Wait for the `Release` workflow** (Actions tab). First-time runs take ~10-15 min (empty Rust cache), subsequent ~5-7 min. It will:
+   - Build `mileboard_<version>_x64-setup.exe` (NSIS) and `mileboard_<version>_x64_en-US.msi` (MSI)
+   - Create a **draft** GitHub Release named `mileboard v0.1.1` with both installers attached
+5. **Verify the draft** on the Releases page:
+   - Download the NSIS `.exe`, spot-check it installs and launches on a clean machine (or with the local app uninstalled)
+   - Edit the auto-generated release notes if needed
+6. **Publish** — *Edit* the draft Release → *Publish release*
+
+### Re-running a release without a new tag
+
+If the workflow fails partway or you want to regenerate installers for an existing tag, use **workflow_dispatch** from the Actions tab and enter the tag name. The existing draft Release will be updated.
+
+### Code signing (future)
+
+The workflow includes commented-out placeholders for `WINDOWS_CERTIFICATE` / `WINDOWS_CERTIFICATE_PASSWORD` secrets. Once a code-signing certificate is acquired, add the secrets and uncomment the env lines — no other changes needed to enable Authenticode signing.
