@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { KeyboardEvent as ReactKeyboardEvent } from 'react';
+import type { JSX, KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { toast } from 'sonner';
 import { useBoardStore } from '../../stores/boardStore';
 import { useFilterStore } from '../../stores/filterStore';
