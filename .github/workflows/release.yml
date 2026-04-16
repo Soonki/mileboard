@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write   # required to create/upload a GitHub Release
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build Tauri app (Windows NSIS + MSI)
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0 (action-v0.6.2)
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Future: code signing env (uncomment when certificate is acquired)
+          # WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          # WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          # Future: auto-updater signing (uncomment when updater is enabled)
+          # TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          # TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PASSWORD }}
+        with:
+          tagName: ${{ github.event.inputs.tag || github.ref_name }}
+          releaseName: "mileboard ${{ github.event.inputs.tag || github.ref_name }}"
+          releaseBody: |
+            Windows installers for mileboard.
+
+            - **NSIS installer** (`mileboard_*_x64-setup.exe`) — recommended for most users. Installs to `%LOCALAPPDATA%\mileboard` without UAC.
+            - **MSI installer** (`mileboard_*_x64_en-US.msi`) — for enterprise deployment via GPO / `msiexec /quiet`.
+
+            > **Unsigned builds:** These installers are not code-signed. On first run, Windows SmartScreen may show "Windows protected your PC" — click **More info → Run anyway**. A code-signing certificate will be added in a future release.
+          releaseDraft: true
+          prerelease: false
+          args: --bundles nsis,msi
