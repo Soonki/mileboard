@@ -37,6 +37,13 @@ Built with [Tauri 2](https://v2.tauri.app/), React, and Rust.
 - [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your OS
 - A [Backlog](https://backlog.com/) account with an API key
 
+### Windows build prerequisites
+
+Building the MSI installer requires [WiX Toolset v3.x](https://wixtoolset.org/releases/) (v4 is not yet supported by Tauri). NSIS is downloaded automatically by Tauri on first build.
+
+- WiX Toolset 3.11.2 or later
+- Microsoft Edge WebView2 Runtime (pre-installed on Windows 11; will be downloaded by the installer on Windows 10)
+
 ## Setup
 
 ```bash
@@ -65,10 +72,16 @@ cd src-tauri && cargo test
 ## Build
 
 ```bash
-npm run tauri build
+npm run tauri build              # build for the current host OS
+npm run tauri:build:windows      # Windows: build NSIS + MSI installers
 ```
 
-Platform-specific installers (`.msi`, `.dmg`, `.deb`, `.AppImage`) will be in `src-tauri/target/release/bundle/`.
+Output (Windows):
+
+- NSIS installer: `src-tauri/target/release/bundle/nsis/mileboard_<version>_x64-setup.exe`
+- MSI installer: `src-tauri/target/release/bundle/msi/mileboard_<version>_x64_en-US.msi`
+
+> **Unsigned builds:** Installers are not code-signed. On first run, Windows SmartScreen may show "Windows protected your PC" — click **More info → Run anyway**.
 
 ## Architecture
 
@@ -136,3 +149,13 @@ npm run tauri dev
 ```
 
 初回起動時に設定画面が表示されます。Backlogのホスト名・APIキー・プロジェクトキーを入力してください。
+
+### ビルド
+
+```bash
+npm run tauri:build:windows
+```
+
+Windows 向けの NSIS (`.exe`) と MSI インストーラが `src-tauri/target/release/bundle/` 配下に生成されます。未署名のため、初回起動時に SmartScreen の警告が出たら「詳細情報」→「実行」をクリックしてください。
+
+MSI の生成には [WiX Toolset v3.x](https://wixtoolset.org/releases/) が事前にインストールされている必要があります。

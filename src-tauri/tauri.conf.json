@@ -23,13 +23,32 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
+    "targets": ["nsis", "msi"],
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "publisher": "soonki-chang",
+    "copyright": "Copyright (c) 2026 soonki-chang",
+    "category": "Productivity",
+    "shortDescription": "Backlog milestone kanban board",
+    "longDescription": "A desktop app that displays Backlog milestones as kanban lanes with drag-and-drop issue movement between milestones.",
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
+      "wix": {
+        "language": ["en-US", "ja-JP"]
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["English", "Japanese"],
+        "displayLanguageSelector": false
+      }
+    }
   }
 }
